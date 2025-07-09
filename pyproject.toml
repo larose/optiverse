@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "optiverse"
+version = "0.0.1"
+description = "Optimization framework using Large Language Models"
+authors = [
+    {name = "Mathieu Larose", email = "mathieu@mathieularose.com"}
+]
+license = "GPL-3.0"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "openai==1.93.1"
+]
+
+[project.optional-dependencies]
+dev = [
+    "twine",
+    "build"
+]
+
+[project.urls]
+Homepage = "https://github.com/larose/optiverse"
+Repository = "https://github.com/larose/optiverse"
+
+[tool.setuptools]
+packages = ["optiverse"]
