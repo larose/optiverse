@@ -1,34 +1,9 @@
-import copy
 import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
-from solver import Context as _Context, solve
-
-
-class Context(_Context):
-    def __init__(self, instance: List[Tuple[float, float]], end_time: datetime) -> None:
-        self._instance = instance
-        self._end_time = end_time
-        self._best_solution: Optional[List[int]] = None
-
-    @property
-    def instance(self) -> List[Tuple[float, float]]:
-        return self._instance
-
-    def remaining_time(self) -> timedelta:
-        now = datetime.now(tz=timezone.utc)
-        remaining = self._end_time - now
-        if remaining < timedelta():
-            remaining = timedelta()
-
-        return remaining
-
-    def report_new_best_solution(self, solution: List[int]) -> None:
-        if self.remaining_time() <= timedelta():
-            return
-
-        self._best_solution = copy.copy(solution)
+from typing import List, Tuple
+from context import Context
+from solver import solve
 
 
 def parse_coordinate_line(line: str) -> Tuple[float, float]:

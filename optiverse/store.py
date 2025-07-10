@@ -10,15 +10,16 @@ from dataclasses import dataclass
 
 @dataclass
 class Solution:
-    file: str
+    code: str
     score: float
     id: str
     description: Optional[str]
+    artifacts: Dict[str, str]
 
 
 class Store(ABC):
     @abstractmethod
-    def add_solution(self, file: str, score: float, description: Optional[str]) -> str:
+    def add_solution(self, code: str, score: float, description: Optional[str], artifacts: Dict[str, str]) -> str:
         pass
 
     @abstractmethod
@@ -49,7 +50,7 @@ class FileSystemStore(Store):
             for solution in sorted_solutions:
                 writer.writerow([solution.id, solution.score])
 
-    def add_solution(self, file: str, score: float, description: Optional[str]) -> str:
+    def add_solution(self, code: str, score: float, description: Optional[str], artifacts: Dict[str, str]) -> str:
         """Add a solution and return its ID."""
         solution_id = uuid.uuid4().hex
         solution_dir = self._directory / solution_id
@@ -58,13 +59,19 @@ class FileSystemStore(Store):
         # Save the solution code
         solution_path = solution_dir / "solution.txt"
         with open(solution_path, "w") as f:
-            f.write(file)
+            f.write(code)
 
         # Save description if provided
         if description is not None:
             description_path = solution_dir / "description.txt"
             with open(description_path, "w") as f:
                 f.write(description)
+
+        # Save artifact files
+        for artifact_name, artifact_content in artifacts.items():
+            artifact_path = solution_dir / artifact_name
+            with open(artifact_path, "w") as f:
+                f.write(artifact_content)
 
         # Save metadata
         meta = {"id": solution_id, "score": score}
@@ -118,8 +125,16 @@ class FileSystemStore(Store):
                     with open(description_path, "r") as f:
                         description = f.read()
 
+                # Load artifact files
+                artifacts = {}
+                known_files = {"metadata.json", "solution.txt", "description.txt"}
+                for artifact_file in solution_dir.iterdir():
+                    if artifact_file.is_file() and artifact_file.name not in known_files:
+                        with open(artifact_file, "r") as f:
+                            artifacts[artifact_file.name] = f.read()
+
                 solution = Solution(
-                    file_content, meta["score"], meta["id"], description
+                    file_content, meta["score"], meta["id"], description, artifacts
                 )
                 solutions.append(solution)
 

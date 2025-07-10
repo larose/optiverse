@@ -103,34 +103,36 @@ Solution text here
         logger.info("Evaluating solution")
 
         # Call evaluator on the temporary directory
-        score = self._evaluator.evaluate(file_content)
+        result = self._evaluator.evaluate(file_content)
 
         # Output the result of the evaluation
-        logger.info(f"Evaluation result: {score}")
+        logger.info(f"Evaluation result: {result.score}")
 
         solution_id = self._store.add_solution(
-            file=file_content,
-            score=score,
+            code=file_content,
+            score=result.score,
             description=description,
+            artifacts=result.artifacts,
         )
         logger.info(f"Saved solution with ID: {solution_id}")
 
     def run(self) -> None:
         logger.info("Evaluating and saving initial solution...")
 
-        initial_solution_score = self._evaluator.evaluate(
+        initial_solution_result = self._evaluator.evaluate(
             self._config.problem.initial_solution
         )
 
         # Save the initial solution
         initial_id = self._store.add_solution(
-            file=self._config.problem.initial_solution,
-            score=initial_solution_score,
+            code=self._config.problem.initial_solution,
+            score=initial_solution_result.score,
             description=None,
+            artifacts=initial_solution_result.artifacts,
         )
 
         logger.info(
-            f"Initial solution saved with ID: {initial_id}, score: {initial_solution_score}"
+            f"Initial solution saved with ID: {initial_id}, score: {initial_solution_result.score}"
         )
 
         for iteration in range(1, self._config.max_iterations + 1):
@@ -166,7 +168,7 @@ Solution text here
 
             logger.info("\nSource code:")
             logger.info("-" * 30)
-            logger.info(f"\n{best_solution.file}")
+            logger.info(f"\n{best_solution.code}")
             logger.info("-" * 30)
         else:
             logger.info("No solutions found")

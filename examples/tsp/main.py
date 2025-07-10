@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import os
+from typing import Tuple
 
 
 logging.basicConfig(
@@ -21,39 +22,65 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
     def __init__(self):
         pass
 
-    def _evaluate_in_temp_dir(self, file: str, temp_dir: Path) -> float:
+    def _evaluate_in_temp_dir(
+        self, code: str, temp_dir: Path
+    ) -> optiverse.evaluator.EvaluatorResult:
         """
         Evaluate a TSP solution by running it in a temporary directory.
 
         Args:
-            file: The solution code as a string
+            code: The solution code as a string
             temp_dir: Path to temporary directory for evaluation
 
         Returns:
-            The average tour distance across 3 runs
+            EvaluatorResult with artifacts and average tour distance
         """
         # Write the solution file
-        Path(temp_dir / "solver.py").write_text(file)
+        Path(temp_dir / "solver.py").write_text(code)
 
         # Copy necessary files
         shutil.copy2(
-            Path(__file__).parent / "solution" / "main.py", temp_dir / "main.py"
+            Path(__file__).parent / "solution" / "a280.tsp", temp_dir / "a280.tsp"
         )
         shutil.copy2(
-            Path(__file__).parent / "solution" / "a280.tsp", temp_dir / "a280.tsp"
+            Path(__file__).parent / "solution" / "context.py", temp_dir / "context.py"
+        )
+        shutil.copy2(
+            Path(__file__).parent / "solution" / "main.py", temp_dir / "main.py"
         )
 
         scores = []
+        artifacts = {}
 
-        # Run 3 times and collect scores
+        # Run 3 times and collect scores and artifacts
         for i in range(3):
-            distance = self._run(temp_dir)
-            scores.append(distance)
+            score, stdout, stderr = self._run(temp_dir)
+            logger.info(f"Score {i + 1}: {score}")
+            scores.append(score)
+
+            # Store artifacts for this run
+            artifacts[f"{i + 1}_stdout.txt"] = stdout
+            artifacts[f"{i + 1}_stderr.txt"] = stderr
 
         # Calculate average, including infinite values
-        return sum(scores) / len(scores)
+        average_score = sum(scores) / len(scores)
 
-    def _run(self, temp_dir: Path) -> float:
+        return optiverse.evaluator.EvaluatorResult(
+            artifacts=artifacts, score=average_score
+        )
+
+    def _execute_subprocess(self, temp_dir: Path) -> subprocess.CompletedProcess:
+        """Execute the subprocess and return the result."""
+        return subprocess.run(
+            ["python", "main.py"],
+            cwd=temp_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=40,
+        )
+
+    def _run(self, temp_dir: Path) -> Tuple[float, str, str]:
         """
         Execute the runner and extract the tour distance.
 
@@ -61,63 +88,37 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
             temp_dir: Path to temporary directory containing solution files
 
         Returns:
-            The tour distance from this run
+            Tuple of (tour distance, stdout, stderr)
         """
         try:
-            # Execute the runner script
-            result = subprocess.run(
-                ["python", "main.py"],
-                cwd=temp_dir,
-                capture_output=True,
-                text=True,
-                timeout=40,
-            )
-
-            # Extract the distance from stdout
-            for line in result.stdout.split("\n"):
-                if line.startswith(">>>"):
-                    distance_str = line.replace(">>>", "").strip()
-                    return float(distance_str)
-
-            # If no output found, return a large penalty
-            return float("inf")
-
+            result = self._execute_subprocess(temp_dir)
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError):
-            # Return a large penalty for failed runs
-            return float("inf")
+            logger.error(f"Error running solution in {temp_dir}", exc_info=True)
+            return float("inf"), "", ""
 
-    def evaluate(self, file: str) -> float:
+        # Now we know we have a valid result
+        stdout = result.stdout
+        stderr = result.stderr
+
+        # Extract the distance from stdout
+        for line in stdout.split("\n"):
+            if line.startswith(">>>"):
+                distance_str = line.replace(">>>", "").strip()
+                return float(distance_str), stdout, stderr
+
+        logger.error(f"No valid output found in {temp_dir}:\n{stdout}")
+        # If no output found, return a large penalty
+        return float("inf"), stdout, stderr
+
+    def evaluate(self, code: str) -> optiverse.evaluator.EvaluatorResult:
         with tempfile.TemporaryDirectory() as temp_dir:
-            return self._evaluate_in_temp_dir(file=file, temp_dir=Path(temp_dir))
-
-
-PROBLEM_DESCRIPTION = """
-Write a Python program that implements a heuristic for the Traveling Salesman Problem (TSP).
-
-Your script must define a `solve` function with the following signature:
-
-```
-def solve(context: Context) -> None:
-    pass
-```
-
-- The `Context` object provides the TSP instance data and methods to report solutions.
-- You may only modify the `solve` function. You are allowed to define and call additional helper functions within your script, but you cannot modify the `Context` class itself.
-
-Your implementation should:
-
-- Access the TSP data through the Context object.
-- Call `context.report_new_best_solution(solution)` only when you have found a better solution than previously reported.
-- The most recently reported solution will be used as the final answer when time runs out.
-
-Important: Any solution reported after time runs out will be ignored. Ensure your implementation checks the remaining time and only reports solutions while time is available.
-"""
+            return self._evaluate_in_temp_dir(code=code, temp_dir=Path(temp_dir))
 
 
 def main():
     config = optiverse.config.Config(
         llm=optiverse.config.LLM(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             client=OpenAI(
                 api_key=os.getenv("GEMINI_API_KEY"),
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
@@ -125,7 +126,7 @@ def main():
         ),
         max_iterations=10,
         problem=optiverse.config.Problem(
-            description=PROBLEM_DESCRIPTION,
+            description=open(Path(__file__).parent / "problem.md").read(),
             initial_solution=open(
                 Path(__file__).parent / "solution" / "solver.py"
             ).read(),

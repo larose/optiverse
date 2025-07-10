@@ -39,7 +39,7 @@ class EvolutionaryPromptGenerator(PromptGenerator):
         )
         if parent_solution.description:
             solutions_context += f"{parent_solution.description}\n"
-        solutions_context += f"```\n{parent_solution.file}\n```\n"
+        solutions_context += f"```\n{parent_solution.code}\n```\n"
 
         if other_solutions:
             solutions_context += "\nOther solutions for reference:\n"
@@ -47,7 +47,7 @@ class EvolutionaryPromptGenerator(PromptGenerator):
                 solutions_context += f"Solution {i+1} (Score: {solution.score:.6f}):\n"
                 if solution.description:
                     solutions_context += f"{solution.description}\n"
-                solutions_context += f"```\n{solution.file}\n```\n"
+                solutions_context += f"```\n{solution.code}\n```\n"
 
         prompt = f"""
 # Problem description
