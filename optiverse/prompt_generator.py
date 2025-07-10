@@ -34,20 +34,21 @@ class EvolutionaryPromptGenerator(PromptGenerator):
         other_solutions = other_solutions[:3]
 
         # Build context
-        solutions_context = (
-            f"Parent solution to improve (Score: {parent_solution.score:.6f}):\n"
-        )
+        solutions_context = f"## Parent solution\n\nScore: {parent_solution.score:.6f}\n\n"
+
         if parent_solution.description:
-            solutions_context += f"{parent_solution.description}\n"
-        solutions_context += f"```\n{parent_solution.code}\n```\n"
+            solutions_context += f"### Description\n\n{parent_solution.description}\n\n"
+
+        solutions_context += f"### Code\n\n```\n{parent_solution.code}\n```\n\n"
 
         if other_solutions:
-            solutions_context += "\nOther solutions for reference:\n"
             for i, solution in enumerate(other_solutions):
-                solutions_context += f"Solution {i+1} (Score: {solution.score:.6f}):\n"
+                solutions_context += f"## Solution {i+1} (for inspiration)\n\nScore: {solution.score:.6f}\n\n"
+
                 if solution.description:
-                    solutions_context += f"{solution.description}\n"
-                solutions_context += f"```\n{solution.code}\n```\n"
+                    solutions_context += f"### Description\n\n{solution.description}\n\n"
+
+                solutions_context += f"### Code\n\n```\n{solution.code}\n```\n\n"
 
         prompt = f"""
 # Problem description
