@@ -1,5 +1,7 @@
 # Optiverse
 
+📖 **Initial blog post release:** [Optiverse: Evolving Code with LLMs](https://mathieularose.com/optiverse-evolving-code-with-llms)
+
 A Python library for evolving code and algorithms using Large Language Models (LLMs), inspired by DeepMind's [AlphaEvolve](https://deepmind.google/discover/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/).
 
 
