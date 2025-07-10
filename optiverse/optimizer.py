@@ -106,7 +106,12 @@ Solution text here
         result = self._evaluator.evaluate(file_content)
 
         # Output the result of the evaluation
-        logger.info(f"Evaluation result: {result.score}")
+        if result.score is None:
+            logger.info(
+                "Evaluation failed - solution did not compile or produce valid results"
+            )
+        else:
+            logger.info(f"Evaluation result: {result.score}")
 
         solution_id = self._store.add_solution(
             code=file_content,
@@ -114,7 +119,11 @@ Solution text here
             description=description,
             artifacts=result.artifacts,
         )
-        logger.info(f"Saved solution with ID: {solution_id}")
+
+        if result.score is None:
+            logger.info(f"Saved failed solution with ID: {solution_id} for debugging")
+        else:
+            logger.info(f"Saved solution with ID: {solution_id}")
 
     def run(self) -> None:
         logger.info("Evaluating and saving initial solution...")
@@ -153,9 +162,11 @@ Solution text here
         logger.info("=" * 50)
 
         all_solutions = self._store.get_all_solutions()
-        if all_solutions:
+        valid_solutions = [s for s in all_solutions if s.score is not None]
+
+        if valid_solutions:
             # Sort by score (best first) and get the top solution
-            sorted_solutions = sorted(all_solutions, key=lambda x: x.score)
+            sorted_solutions = sorted(valid_solutions, key=lambda x: x.score)
             best_solution = sorted_solutions[0]
             logger.info(f"ID: {best_solution.id}")
             logger.info(f"Score: {best_solution.score}")
@@ -171,4 +182,4 @@ Solution text here
             logger.info(f"\n{best_solution.code}")
             logger.info("-" * 30)
         else:
-            logger.info("No solutions found")
+            logger.info("No valid solutions found - all solutions failed evaluation")

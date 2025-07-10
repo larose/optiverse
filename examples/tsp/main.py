@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import os
-from typing import Tuple
+from typing import Tuple, Optional
 
 
 logging.basicConfig(
@@ -62,12 +62,17 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
             artifacts[f"{i + 1}_stdout.txt"] = stdout
             artifacts[f"{i + 1}_stderr.txt"] = stderr
 
-        # Calculate average, including infinite values
-        average_score = sum(scores) / len(scores)
-
-        return optiverse.evaluator.EvaluatorResult(
-            artifacts=artifacts, score=average_score
-        )
+        # If any run failed, return None score
+        if any(score is None for score in scores):
+            return optiverse.evaluator.EvaluatorResult(
+                artifacts=artifacts, score=None
+            )
+        else:
+            # All runs succeeded, calculate average
+            average_score = sum(scores) / len(scores)
+            return optiverse.evaluator.EvaluatorResult(
+                artifacts=artifacts, score=average_score
+            )
 
     def _execute_subprocess(self, temp_dir: Path) -> subprocess.CompletedProcess:
         """Execute the subprocess and return the result."""
@@ -80,7 +85,7 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
             timeout=40,
         )
 
-    def _run(self, temp_dir: Path) -> Tuple[float, str, str]:
+    def _run(self, temp_dir: Path) -> Tuple[Optional[float], str, str]:
         """
         Execute the runner and extract the tour distance.
 
@@ -88,13 +93,13 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
             temp_dir: Path to temporary directory containing solution files
 
         Returns:
-            Tuple of (tour distance, stdout, stderr)
+            Tuple of (tour distance or None if failed, stdout, stderr)
         """
         try:
             result = self._execute_subprocess(temp_dir)
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError):
             logger.error(f"Error running solution in {temp_dir}", exc_info=True)
-            return float("inf"), "", ""
+            return None, "", ""
 
         # Now we know we have a valid result
         stdout = result.stdout
@@ -107,8 +112,8 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
                 return float(distance_str), stdout, stderr
 
         logger.error(f"No valid output found in {temp_dir}:\n{stdout}")
-        # If no output found, return a large penalty
-        return float("inf"), stdout, stderr
+        # If no output found, return None
+        return None, stdout, stderr
 
     def evaluate(self, code: str) -> optiverse.evaluator.EvaluatorResult:
         with tempfile.TemporaryDirectory() as temp_dir:

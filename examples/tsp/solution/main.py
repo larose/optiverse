@@ -1,5 +1,6 @@
 import math
 from datetime import datetime, timedelta, timezone
+import os
 from pathlib import Path
 from typing import List, Tuple
 from context import Context
@@ -104,17 +105,19 @@ def calculate_euclidean_distance(
 def calculate_tour_distance(
     solution: List[int], instance: List[Tuple[float, float]]
 ) -> float:
-    """Calculate total distance of a TSP tour.
+    # Check that every city appears exactly once
+    solution_set = set(solution)
+    expected_set = set(range(len(instance)))
 
-    Args:
-        solution: List of city indices representing the tour order
-        instance: List of (x, y) coordinate tuples for all cities
+    # Cities in solution but not in instance (invalid indices)
+    invalid_cities = solution_set - expected_set
+    if invalid_cities:
+        raise ValueError(f"Solution contains invalid city indices: {invalid_cities}")
 
-    Returns:
-        Total distance of the tour
-    """
-    if not solution or len(solution) < 2:
-        return float("inf")
+    # Cities in instance but not in solution (missing cities)
+    missing_cities = expected_set - solution_set
+    if missing_cities:
+        raise ValueError(f"Solution is missing cities: {missing_cities}")
 
     total_distance = 0.0
 
@@ -128,20 +131,22 @@ def calculate_tour_distance(
 
 
 def main():
+    timeout_seconds = int(os.getenv("TIMEOUT_SECONDS", "30"))
+
     instance = parse_tsplib_file(Path(__file__).parent / "a280.tsp")
 
     now = datetime.now(tz=timezone.utc)
-    end_time = now + timedelta(seconds=30)
+    end_time = now + timedelta(seconds=timeout_seconds)
 
     context = Context(instance=instance, end_time=end_time)
     solve(context)
 
     # Calculate and output the tour distance
-    if context._best_solution is not None:
-        tour_distance = calculate_tour_distance(context._best_solution, instance)
-        print(f">>> {tour_distance}")
-    else:
-        print(f">>> {float('inf')}")
+    if context._best_solution is None:
+        raise Exception("No solution found")
+
+    tour_distance = calculate_tour_distance(context._best_solution, instance)
+    print(f">>> {tour_distance}")
 
 
 if __name__ == "__main__":

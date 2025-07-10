@@ -11,7 +11,7 @@ from dataclasses import dataclass
 @dataclass
 class Solution:
     code: str
-    score: float
+    score: Optional[float]
     id: str
     description: Optional[str]
     artifacts: Dict[str, str]
@@ -19,7 +19,7 @@ class Solution:
 
 class Store(ABC):
     @abstractmethod
-    def add_solution(self, code: str, score: float, description: Optional[str], artifacts: Dict[str, str]) -> str:
+    def add_solution(self, code: str, score: Optional[float], description: Optional[str], artifacts: Dict[str, str]) -> str:
         pass
 
     @abstractmethod
@@ -40,17 +40,25 @@ class FileSystemStore(Store):
         """Write all solutions to solutions.csv file sorted by score (best first)."""
         solutions = self.get_all_solutions()
 
-        # Sort solutions by score for CSV (best first)
-        sorted_solutions = sorted(solutions, key=lambda x: x.score)
+        # Separate valid solutions from failed solutions
+        valid_solutions = [s for s in solutions if s.score is not None]
+        failed_solutions = [s for s in solutions if s.score is None]
+
+        # Sort valid solutions by score (best first)
+        sorted_valid = sorted(valid_solutions, key=lambda x: x.score)
+
+        # Combine: valid solutions first, then failed solutions
+        all_sorted = sorted_valid + failed_solutions
 
         csv_path = self._directory / "solutions.csv"
         with open(csv_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(["id", "score"])  # Header
-            for solution in sorted_solutions:
-                writer.writerow([solution.id, solution.score])
+            for solution in all_sorted:
+                score_display = "FAILED" if solution.score is None else solution.score
+                writer.writerow([solution.id, score_display])
 
-    def add_solution(self, code: str, score: float, description: Optional[str], artifacts: Dict[str, str]) -> str:
+    def add_solution(self, code: str, score: Optional[float], description: Optional[str], artifacts: Dict[str, str]) -> str:
         """Add a solution and return its ID."""
         solution_id = uuid.uuid4().hex
         solution_dir = self._directory / solution_id

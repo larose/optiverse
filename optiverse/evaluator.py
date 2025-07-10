@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 
 
 @dataclass
 class EvaluatorResult:
     artifacts: Dict[str, str]  # name, file content
-    score: float
+    score: Optional[float]
 
 
 class Evaluator(ABC):

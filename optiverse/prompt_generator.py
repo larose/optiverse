@@ -23,10 +23,13 @@ class PromptGenerator(ABC):
 class EvolutionaryPromptGenerator(PromptGenerator):
     def generate(self, context: Context) -> str:
         all_solutions = context.store.get_all_solutions()
-        sorted_solutions = list(sorted(all_solutions, key=lambda s: s.score))
+
+        # Filter out solutions with None scores (failed solutions)
+        valid_solutions = [s for s in all_solutions if s.score is not None]
+        sorted_solutions = list(sorted(valid_solutions, key=lambda s: s.score))
 
         if not sorted_solutions:
-            raise Exception("No solutions found in store")
+            raise Exception("No valid solutions found in store")
 
         parent_solution = sorted_solutions[0]
         other_solutions = sorted_solutions[1:]
