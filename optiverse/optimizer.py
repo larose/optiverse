@@ -31,7 +31,9 @@ class Optimizer:
             problem=self._config.problem,
             store=self._store,
         )
-        prompt = self._prompt_generator.generate(context=context)
+        prompt_result = self._prompt_generator.generate(context=context)
+
+        prompt = prompt_result.text
 
         prompt += """
 # Response
@@ -114,10 +116,11 @@ Solution text here
             logger.info(f"Evaluation result: {result.score}")
 
         solution_id = self._store.add_solution(
-            code=file_content,
-            score=result.score,
-            description=description,
             artifacts=result.artifacts,
+            code=file_content,
+            description=description,
+            group=prompt_result.group,
+            score=result.score,
         )
 
         if result.score is None:
@@ -134,10 +137,11 @@ Solution text here
 
         # Save the initial solution
         initial_id = self._store.add_solution(
-            code=self._config.problem.initial_solution,
-            score=initial_solution_result.score,
-            description=None,
             artifacts=initial_solution_result.artifacts,
+            code=self._config.problem.initial_solution,
+            description=None,
+            group=0,
+            score=initial_solution_result.score,
         )
 
         logger.info(

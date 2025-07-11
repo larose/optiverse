@@ -64,9 +64,7 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
 
         # If any run failed, return None score
         if any(score is None for score in scores):
-            return optiverse.evaluator.EvaluatorResult(
-                artifacts=artifacts, score=None
-            )
+            return optiverse.evaluator.EvaluatorResult(artifacts=artifacts, score=None)
         else:
             # All runs succeeded, calculate average
             average_score = sum(scores) / len(scores)

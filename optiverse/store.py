@@ -10,16 +10,24 @@ from dataclasses import dataclass
 
 @dataclass
 class Solution:
-    code: str
-    score: Optional[float]
-    id: str
-    description: Optional[str]
     artifacts: Dict[str, str]
+    code: str
+    description: Optional[str]
+    group: int
+    id: str
+    score: Optional[float]
 
 
 class Store(ABC):
     @abstractmethod
-    def add_solution(self, code: str, score: Optional[float], description: Optional[str], artifacts: Dict[str, str]) -> str:
+    def add_solution(
+        self,
+        artifacts: Dict[str, str],
+        description: Optional[str],
+        group: int,
+        code: str,
+        score: Optional[float],
+    ) -> str:
         pass
 
     @abstractmethod
@@ -53,12 +61,19 @@ class FileSystemStore(Store):
         csv_path = self._directory / "solutions.csv"
         with open(csv_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(["id", "score"])  # Header
+            writer.writerow(["id", "score", "group"])  # Header
             for solution in all_sorted:
                 score_display = "FAILED" if solution.score is None else solution.score
-                writer.writerow([solution.id, score_display])
+                writer.writerow([solution.id, score_display, solution.group])
 
-    def add_solution(self, code: str, score: Optional[float], description: Optional[str], artifacts: Dict[str, str]) -> str:
+    def add_solution(
+        self,
+        artifacts: Dict[str, str],
+        code: str,
+        description: Optional[str],
+        group: int,
+        score: Optional[float],
+    ) -> str:
         """Add a solution and return its ID."""
         solution_id = uuid.uuid4().hex
         solution_dir = self._directory / solution_id
@@ -82,7 +97,7 @@ class FileSystemStore(Store):
                 f.write(artifact_content)
 
         # Save metadata
-        meta = {"id": solution_id, "score": score}
+        meta = {"id": solution_id, "group": group, "score": score}
         meta_file = solution_dir / "metadata.json"
         with open(meta_file, "w") as f:
             json.dump(meta, f, indent=2)
@@ -137,12 +152,20 @@ class FileSystemStore(Store):
                 artifacts = {}
                 known_files = {"metadata.json", "solution.txt", "description.txt"}
                 for artifact_file in solution_dir.iterdir():
-                    if artifact_file.is_file() and artifact_file.name not in known_files:
+                    if (
+                        artifact_file.is_file()
+                        and artifact_file.name not in known_files
+                    ):
                         with open(artifact_file, "r") as f:
                             artifacts[artifact_file.name] = f.read()
 
                 solution = Solution(
-                    file_content, meta["score"], meta["id"], description, artifacts
+                    artifacts=artifacts,
+                    code=file_content,
+                    description=description,
+                    group=meta["group"],
+                    id=meta["id"],
+                    score=meta["score"],
                 )
                 solutions.append(solution)
 
