@@ -22,7 +22,12 @@ classifiers = [
 dependencies = ["openai==1.93.1"]
 
 [project.optional-dependencies]
-dev = ["twine==6.1.0", "build==1.2.2.post1", "pyright==1.1.403"]
+dev = [
+    "black==25.1.0",
+    "build==1.2.2.post1",
+    "pyright==1.1.403",
+    "twine==6.1.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/larose/optiverse"
@@ -30,6 +35,10 @@ Repository = "https://github.com/larose/optiverse"
 
 [tool.setuptools]
 packages = ["optiverse"]
+
+[tool.black]
+target-version = ['py310']
+include = '(examples|optiverse).*\.py$'
 
 [tool.pyright]
 include = ["examples", "optiverse"]
