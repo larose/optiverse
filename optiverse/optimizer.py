@@ -128,6 +128,7 @@ Solution text here
             code=file_content,
             description=description,
             group=prompt_result.group,
+            is_initial=False,
             score=result.score,
         )
 
@@ -149,6 +150,7 @@ Solution text here
             code=self._config.problem.initial_solution,
             description=None,
             group=0,
+            is_initial=True,
             score=initial_solution_result.score,
         )
 

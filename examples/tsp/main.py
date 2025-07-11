@@ -128,7 +128,7 @@ def main():
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
             ),
         ),
-        max_iterations=10,
+        max_iterations=25,
         problem=optiverse.config.Problem(
             description=open(Path(__file__).parent / "problem.md").read(),
             initial_solution=open(

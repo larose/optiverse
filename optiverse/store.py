@@ -15,6 +15,7 @@ class Solution:
     description: Optional[str]
     group: int
     id: str
+    is_initial: bool
     score: Optional[float]
 
 
@@ -26,6 +27,7 @@ class Store(ABC):
         code: str,
         description: Optional[str],
         group: int,
+        is_initial: bool,
         score: Optional[float],
     ) -> str:
         pass
@@ -72,6 +74,7 @@ class FileSystemStore(Store):
         code: str,
         description: Optional[str],
         group: int,
+        is_initial: bool,
         score: Optional[float],
     ) -> str:
         """Add a solution and return its ID."""
@@ -97,7 +100,12 @@ class FileSystemStore(Store):
                 f.write(artifact_content)
 
         # Save metadata
-        meta = {"id": solution_id, "group": group, "score": score}
+        meta = {
+            "id": solution_id,
+            "group": group,
+            "is_initial": is_initial,
+            "score": score,
+        }
         meta_file = solution_dir / "metadata.json"
         with open(meta_file, "w") as f:
             json.dump(meta, f, indent=2)
@@ -165,6 +173,7 @@ class FileSystemStore(Store):
                     description=description,
                     group=meta["group"],
                     id=meta["id"],
+                    is_initial=meta["is_initial"],
                     score=meta["score"],
                 )
                 solutions.append(solution)
