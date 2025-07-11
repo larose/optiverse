@@ -14,6 +14,7 @@ Each city in the problem instance is identified by a unique integer ID, which co
 - Do not alter the `Context` class or its interface.
 - Solutions reported after the time limit will be ignored.
 - All submitted tours must be valid (cover all cities exactly once, form a loop).
+- Do not use nested functions unless they are strictly necessary.
 
 ## `Context` Interface
 
@@ -46,6 +47,7 @@ class Context:
 
 - Periodically check `context.remaining_time()` to ensure there is sufficient time remaining.
 - Call `context.report_new_best_solution(solution)` only when a new better solution is found.
+- Pre-compute the distance matrix at the beginning.
 
 ## Evaluation Criteria
 
