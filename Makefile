@@ -30,3 +30,10 @@ publish.test: build
 .PHONY: run.tsp
 run.tsp:
 	$(PYTHON) -m examples.tsp.main
+
+.PHONY: test
+test: test.types
+
+.PHONY: test.types
+test.types:
+	$(VENV)/bin/pyright

@@ -4,7 +4,7 @@ import uuid
 import json
 import shutil
 import csv
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, cast
 from dataclasses import dataclass
 
 
@@ -23,9 +23,9 @@ class Store(ABC):
     def add_solution(
         self,
         artifacts: Dict[str, str],
+        code: str,
         description: Optional[str],
         group: int,
-        code: str,
         score: Optional[float],
     ) -> str:
         pass
@@ -53,7 +53,7 @@ class FileSystemStore(Store):
         failed_solutions = [s for s in solutions if s.score is None]
 
         # Sort valid solutions by score (best first)
-        sorted_valid = sorted(valid_solutions, key=lambda x: x.score)
+        sorted_valid = sorted(valid_solutions, key=lambda x: cast(float, x.score))
 
         # Combine: valid solutions first, then failed solutions
         all_sorted = sorted_valid + failed_solutions
@@ -122,7 +122,7 @@ class FileSystemStore(Store):
 
     def get_all_solutions(self) -> List[Solution]:
         """Get all solutions."""
-        solutions = []
+        solutions: List[Solution] = []
 
         if not self._directory.exists():
             return solutions
@@ -149,7 +149,7 @@ class FileSystemStore(Store):
                         description = f.read()
 
                 # Load artifact files
-                artifacts = {}
+                artifacts: Dict[str, str] = {}
                 known_files = {"metadata.json", "solution.txt", "description.txt"}
                 for artifact_file in solution_dir.iterdir():
                     if (
@@ -170,8 +170,3 @@ class FileSystemStore(Store):
                 solutions.append(solution)
 
         return solutions
-
-    def get_all_solutions_with_scores(self) -> List[Dict[str, any]]:
-        """Get all solutions with their scores as dictionaries."""
-        solutions = self.get_all_solutions()
-        return [{"id": sol.id, "score": sol.score} for sol in solutions]

@@ -10,6 +10,10 @@ class Context:
         self._best_solution: Optional[List[int]] = None
 
     @property
+    def best_solution(self) -> Optional[List[int]]:
+        return self._best_solution
+
+    @property
     def instance(self) -> List[Tuple[float, float]]:
         """
         Returns:

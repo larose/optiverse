@@ -36,7 +36,7 @@ def parse_coordinates_section(lines: List[str]) -> List[Tuple[float, float]]:
     Returns:
         List of (x, y) coordinate tuples
     """
-    coordinates = []
+    coordinates: List[Tuple[float, float]] = []
 
     for line in lines:
         line = line.strip()
@@ -142,10 +142,10 @@ def main():
     solve(context)
 
     # Calculate and output the tour distance
-    if context._best_solution is None:
+    if context.best_solution is None:
         raise Exception("No solution found")
 
-    tour_distance = calculate_tour_distance(context._best_solution, instance)
+    tour_distance = calculate_tour_distance(context.best_solution, instance)
     print(f">>> {tour_distance}")
 
 

@@ -1,9 +1,11 @@
 import logging
 import re
+from typing import cast, List
 from .prompt_generator import Context, PromptGenerator
 from .evaluator import Evaluator
 from .store import Store
 from .config import Config
+from openai.types.chat import ChatCompletionMessageParam
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,9 @@ Solution text here
 ```
 """
 
-        messages = [{"role": "user", "content": prompt}]
+        messages: List[ChatCompletionMessageParam] = [
+            {"role": "user", "content": prompt}
+        ]
 
         logger.debug("=" * 60)
         logger.debug("=== LLM INPUT ===")
@@ -77,6 +81,10 @@ Solution text here
         logger.debug("Response received from LLM:")
         logger.debug(response_content)
         logger.debug("=" * 60)
+
+        if response_content is None:
+            logger.info("No content received from LLM response")
+            return
 
         # Parse the response to extract explanation and code
         # Look for the first ``` to separate explanation from code
@@ -170,7 +178,9 @@ Solution text here
 
         if valid_solutions:
             # Sort by score (best first) and get the top solution
-            sorted_solutions = sorted(valid_solutions, key=lambda x: x.score)
+            sorted_solutions = sorted(
+                valid_solutions, key=lambda x: cast(float, x.score)
+            )
             best_solution = sorted_solutions[0]
             logger.info(f"ID: {best_solution.id}")
             logger.info(f"Score: {best_solution.score}")

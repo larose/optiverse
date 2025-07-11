@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import os
-from typing import Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
 
 logging.basicConfig(
@@ -49,30 +49,31 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
             Path(__file__).parent / "solution" / "main.py", temp_dir / "main.py"
         )
 
-        scores = []
-        artifacts = {}
+        scores: List[float] = []
+        artifacts: Dict[str, str] = {}
 
         # Run 3 times and collect scores and artifacts
         for i in range(3):
             score, stdout, stderr = self._run(temp_dir)
             logger.info(f"Score {i + 1}: {score}")
-            scores.append(score)
-
             # Store artifacts for this run
             artifacts[f"{i + 1}_stdout.txt"] = stdout
             artifacts[f"{i + 1}_stderr.txt"] = stderr
 
-        # If any run failed, return None score
-        if any(score is None for score in scores):
-            return optiverse.evaluator.EvaluatorResult(artifacts=artifacts, score=None)
-        else:
-            # All runs succeeded, calculate average
-            average_score = sum(scores) / len(scores)
-            return optiverse.evaluator.EvaluatorResult(
-                artifacts=artifacts, score=average_score
-            )
+            if score is None:
+                return optiverse.evaluator.EvaluatorResult(
+                    artifacts=artifacts, score=None
+                )
 
-    def _execute_subprocess(self, temp_dir: Path) -> subprocess.CompletedProcess:
+            scores.append(score)
+
+        # All runs succeeded, calculate average
+        average_score = sum(scores) / len(scores)
+        return optiverse.evaluator.EvaluatorResult(
+            artifacts=artifacts, score=average_score
+        )
+
+    def _execute_subprocess(self, temp_dir: Path) -> subprocess.CompletedProcess[str]:
         """Execute the subprocess and return the result."""
         return subprocess.run(
             ["python", "main.py"],

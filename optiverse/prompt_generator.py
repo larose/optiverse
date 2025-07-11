@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import random
-from typing import List
+from typing import cast, List
 
 from .store import Solution, Store
 from .config import Problem
@@ -34,7 +34,7 @@ class EvolutionaryPromptGenerator(PromptGenerator):
         # Filter out solutions with None scores (failed solutions)
         valid_solutions = [s for s in all_solutions if s.score is not None]
         sorted_solutions: List[Solution] = list(
-            sorted(valid_solutions, key=lambda s: s.score)
+            sorted(valid_solutions, key=lambda s: cast(float, s.score))
         )
 
         if not sorted_solutions:

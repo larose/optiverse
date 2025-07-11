@@ -6,9 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "optiverse"
 version = "0.0.1"
 description = "Optimization framework using Large Language Models"
-authors = [
-    {name = "Mathieu Larose", email = "mathieu@mathieularose.com"}
-]
+authors = [{ name = "Mathieu Larose", email = "mathieu@mathieularose.com" }]
 license = "GPL-3.0"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,15 +19,10 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = [
-    "openai==1.93.1"
-]
+dependencies = ["openai==1.93.1"]
 
 [project.optional-dependencies]
-dev = [
-    "twine",
-    "build"
-]
+dev = ["twine==6.1.0", "build==1.2.2.post1", "pyright==1.1.403"]
 
 [project.urls]
 Homepage = "https://github.com/larose/optiverse"
@@ -37,3 +30,11 @@ Repository = "https://github.com/larose/optiverse"
 
 [tool.setuptools]
 packages = ["optiverse"]
+
+[tool.pyright]
+include = ["examples", "optiverse"]
+pythonVersion = "3.10"
+typeCheckingMode = "strict"
+reportMissingImports = true
+reportUnusedImport = true
+reportUnusedVariable = true
