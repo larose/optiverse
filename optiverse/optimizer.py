@@ -125,6 +125,7 @@ Solution text here
             code=file_content,
             description=description,
             is_initial=False,
+            metrics=result.metrics,
             score=result.score,
             tags={"group": prompt_result.group},
         )
@@ -147,6 +148,7 @@ Solution text here
             code=self._config.problem.initial_solution,
             description=None,
             is_initial=True,
+            metrics=initial_solution_result.metrics,
             score=initial_solution_result.score,
             tags={"group": 0},
         )

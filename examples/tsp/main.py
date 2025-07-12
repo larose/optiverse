@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import os
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 
 
 logging.basicConfig(
@@ -21,6 +21,15 @@ logger = logging.getLogger(__name__)
 class TSPEvaluator(optiverse.evaluator.Evaluator):
     def __init__(self):
         pass
+
+    def _calculate_code_metrics(self, code: str) -> Dict[str, Union[int, float]]:
+        """Calculate simple metrics from the solution code"""
+        metrics: Dict[str, Union[int, float]] = {}
+
+        # Simple line count: just count \n characters
+        metrics["line_count"] = code.count("\n")
+
+        return metrics
 
     def _evaluate_in_temp_dir(
         self, code: str, temp_dir: Path
@@ -52,6 +61,9 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
         scores: List[float] = []
         artifacts: Dict[str, str] = {}
 
+        # Calculate basic metrics from the code
+        metrics = self._calculate_code_metrics(code)
+
         # Run 3 times and collect scores and artifacts
         for i in range(3):
             score, stdout, stderr = self._run(temp_dir)
@@ -62,15 +74,22 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
 
             if score is None:
                 return optiverse.evaluator.EvaluatorResult(
-                    artifacts=artifacts, score=None
+                    artifacts=artifacts, metrics=metrics, score=None
                 )
 
             scores.append(score)
 
-        # All runs succeeded, calculate average
+        # All runs succeeded, calculate average and score statistics
         average_score = sum(scores) / len(scores)
+        score_variance = sum((s - average_score) ** 2 for s in scores) / len(scores)
+
+        # Add score statistics to metrics
+        metrics["score_variance"] = score_variance
+        metrics["best_score"] = min(scores)
+        metrics["worst_score"] = max(scores)
+
         return optiverse.evaluator.EvaluatorResult(
-            artifacts=artifacts, score=average_score
+            artifacts=artifacts, metrics=metrics, score=average_score
         )
 
     def _execute_subprocess(self, temp_dir: Path) -> subprocess.CompletedProcess[str]:

@@ -15,6 +15,7 @@ class Solution:
     description: Optional[str]
     id: str
     is_initial: bool
+    metrics: Dict[str, Union[int, float]]
     score: Optional[float]
     tags: Dict[str, Union[str, int]]
 
@@ -27,6 +28,7 @@ class Store(ABC):
         code: str,
         description: Optional[str],
         is_initial: bool,
+        metrics: Dict[str, Union[int, float]],
         score: Optional[float],
         tags: Dict[str, Union[str, int]],
     ) -> None:
@@ -60,18 +62,22 @@ class FileSystemStore(Store):
         # Combine: valid solutions first, then failed solutions
         all_sorted = sorted_valid + failed_solutions
 
-        # Collect all unique tag names and sort them alphabetically
+        # Collect all unique tag and metric names and sort them alphabetically
         all_tag_names: Set[str] = set()
+        all_metric_names: Set[str] = set()
         for solution in all_sorted:
             all_tag_names.update(solution.tags.keys())
+            all_metric_names.update(solution.metrics.keys())
         sorted_tag_names = sorted(all_tag_names)
+        sorted_metric_names = sorted(all_metric_names)
 
         csv_path = self._directory / "solutions.csv"
         with open(csv_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
-            # Create dynamic headers with t_{tag_name} format
+            # Create dynamic headers with t_{tag_name} and m_{metric_name} format
             tag_headers = [f"t_{tag_name}" for tag_name in sorted_tag_names]
-            writer.writerow(["id", "score"] + tag_headers)  # Header
+            metric_headers = [f"m_{metric_name}" for metric_name in sorted_metric_names]
+            writer.writerow(["id", "score"] + tag_headers + metric_headers)  # Header
 
             for solution in all_sorted:
                 score_display = "FAILED" if solution.score is None else solution.score
@@ -79,7 +85,14 @@ class FileSystemStore(Store):
                 tag_values = [
                     solution.tags.get(tag_name, "") for tag_name in sorted_tag_names
                 ]
-                writer.writerow([solution.id, score_display] + tag_values)
+                # Create row with metric values in the appropriate columns
+                metric_values = [
+                    solution.metrics.get(metric_name, "")
+                    for metric_name in sorted_metric_names
+                ]
+                writer.writerow(
+                    [solution.id, score_display] + tag_values + metric_values
+                )
 
     def add_solution(
         self,
@@ -87,6 +100,7 @@ class FileSystemStore(Store):
         code: str,
         description: Optional[str],
         is_initial: bool,
+        metrics: Dict[str, Union[int, float]],
         score: Optional[float],
         tags: Dict[str, Union[str, int]],
     ) -> None:
@@ -115,6 +129,7 @@ class FileSystemStore(Store):
         meta = {
             "id": id,
             "is_initial": is_initial,
+            "metrics": metrics,
             "score": score,
             "tags": tags,
         }
@@ -178,6 +193,7 @@ class FileSystemStore(Store):
                     description=description,
                     id=meta["id"],
                     is_initial=meta["is_initial"],
+                    metrics=meta["metrics"],
                     score=meta["score"],
                     tags=meta["tags"],
                 )

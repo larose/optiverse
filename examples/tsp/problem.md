@@ -47,7 +47,6 @@ class Context:
 
 - You should periodically check `context.remaining_time()` to ensure there is sufficient time remaining.
 - You should call `context.report_new_best_solution(solution)` only when a new better solution is found.
-- You should pre-compute the distance matrix at the beginning.
 
 ## Evaluation Criteria
 

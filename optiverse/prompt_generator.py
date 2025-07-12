@@ -95,8 +95,16 @@ class EvolutionaryPromptGenerator(PromptGenerator):
 
         # Build context
         solutions_context = (
-            f"## Parent solution\n\nScore: {parent_solution.score:.6f}\n\n"
+            f"## Parent solution\n\nScore: {parent_solution.score:.6f}\n"
         )
+
+        # Add metrics in formatted style
+        if parent_solution.metrics:
+            solutions_context += "\nMetrics:\n"
+            for metric_name, metric_value in parent_solution.metrics.items():
+                solutions_context += f"  - {metric_name}: {metric_value}\n"
+
+        solutions_context += "\n"
 
         if parent_solution.description:
             solutions_context += f"### Description\n\n{parent_solution.description}\n\n"
@@ -105,7 +113,15 @@ class EvolutionaryPromptGenerator(PromptGenerator):
 
         if other_solutions:
             for i, solution in enumerate(other_solutions):
-                solutions_context += f"## Solution {i+1} (for inspiration)\n\nScore: {solution.score:.6f}\n\n"
+                solutions_context += f"## Solution {i+1} (for inspiration)\n\nScore: {solution.score:.6f}\n"
+
+                # Add metrics for other solutions too
+                if solution.metrics:
+                    solutions_context += "\nMetrics:\n"
+                    for metric_name, metric_value in solution.metrics.items():
+                        solutions_context += f"  - {metric_name}: {metric_value}\n"
+
+                solutions_context += "\n"
 
                 if solution.description:
                     solutions_context += (
