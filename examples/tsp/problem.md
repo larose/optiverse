@@ -1,20 +1,23 @@
 Implement a heuristic solver for the Traveling Salesman Problem (TSP) in Python by completing the `solve` function below. Your goal is to find the shortest possible tour within the given time limit.
 
+## Requirements
+
+You MUST define a `solve` function with the signature shown below. Any helper functions MUST also be defined at the top level (not nested).
+
 ```
 def solve(context: Context) -> None:
-    pass
+    ...
 ```
 
-Each city in the problem instance is identified by a unique integer ID, which corresponds to its index (position) in the `context.instance` list. A solution should be represented as a list of these city IDs, specifying the order in which the cities are visited to form a complete tour.
+You MUST NOT modify the `Context` class or its interface.
 
-## Constraints
+You MUST submit only valid tours covering all cities exactly once, forming a loop.
 
-- You may only modify the `solve` function and any helper functions you introduce within the same file.
-- You're permitted to import any modules from the Python Standard Library, but no external packages are allowed.
-- Do not alter the `Context` class or its interface.
-- Solutions reported after the time limit will be ignored.
-- All submitted tours must be valid (cover all cities exactly once, form a loop).
-- Do not use nested functions unless they are strictly necessary.
+You MUST ensure solutions are reported before the time limit expires. Solutions reported after the time limit will be ignored.
+
+You MUST use only the Python Standard Library; external packages are not allowed.
+
+You SHOULD call `context.report_new_best_solution(solution)` only when a better solution is found to minimise overhead.
 
 ## `Context` Interface
 
@@ -42,11 +45,6 @@ class Context:
         """
         ...
 ```
-
-## Guidelines
-
-- You should periodically check `context.remaining_time()` to ensure there is sufficient time remaining.
-- You should call `context.report_new_best_solution(solution)` only when a new better solution is found.
 
 ## Evaluation Criteria
 
