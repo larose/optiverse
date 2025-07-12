@@ -10,7 +10,6 @@ from dataclasses import dataclass
 
 @dataclass
 class Solution:
-    artifacts: Dict[str, str]
     code: str
     description: Optional[str]
     id: str
@@ -29,6 +28,7 @@ class Store(ABC):
         description: Optional[str],
         is_initial: bool,
         metrics: Dict[str, Union[int, float]],
+        prompt: str,
         score: Optional[float],
         tags: Dict[str, Union[str, int]],
     ) -> str:
@@ -101,6 +101,7 @@ class FileSystemStore(Store):
         description: Optional[str],
         is_initial: bool,
         metrics: Dict[str, Union[int, float]],
+        prompt: str,
         score: Optional[float],
         tags: Dict[str, Union[str, int]],
     ) -> str:
@@ -124,6 +125,11 @@ class FileSystemStore(Store):
             artifact_path = solution_dir / artifact_name
             with open(artifact_path, "w") as f:
                 f.write(artifact_content)
+
+        # Save the prompt
+        prompt_path = solution_dir / "prompt.md"
+        with open(prompt_path, "w") as f:
+            f.write(prompt)
 
         # Save metadata
         meta = {
@@ -178,19 +184,7 @@ class FileSystemStore(Store):
                     with open(description_path, "r") as f:
                         description = f.read()
 
-                # Load artifact files
-                artifacts: Dict[str, str] = {}
-                known_files = {"metadata.json", "solution.txt", "description.txt"}
-                for artifact_file in solution_dir.iterdir():
-                    if (
-                        artifact_file.is_file()
-                        and artifact_file.name not in known_files
-                    ):
-                        with open(artifact_file, "r") as f:
-                            artifacts[artifact_file.name] = f.read()
-
                 solution = Solution(
-                    artifacts=artifacts,
                     code=file_content,
                     description=description,
                     id=meta["id"],

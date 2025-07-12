@@ -127,14 +127,21 @@ Solution text here
         else:
             logger.info(f"Evaluation result: {result.score}")
 
+        # Add parent solution information to tags
+        enhanced_tags = strategy_result.tags.copy()
+        for i, solution_with_title in enumerate(strategy_result.solutions, 1):
+            enhanced_tags[f"parent_id_{i}"] = solution_with_title.solution.id
+            enhanced_tags[f"parent_title_{i}"] = solution_with_title.title
+
         solution_id = self._store.add_solution(
             artifacts=result.artifacts,
             code=file_content,
             description=description,
             is_initial=False,
             metrics=result.metrics,
+            prompt=prompt,
             score=result.score,
-            tags=strategy_result.tags,
+            tags=enhanced_tags,
         )
         self._strategy.result(iteration=iteration, score=result.score)
 
@@ -157,6 +164,7 @@ Solution text here
             description=None,
             is_initial=True,
             metrics=initial_solution_result.metrics,
+            prompt="",
             score=initial_solution_result.score,
             tags={},
         )
