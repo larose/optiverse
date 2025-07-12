@@ -4,7 +4,7 @@ import uuid
 import json
 import shutil
 import csv
-from typing import List, Dict, Optional, cast
+from typing import List, Dict, Optional, Set, Union, cast
 from dataclasses import dataclass
 
 
@@ -13,10 +13,10 @@ class Solution:
     artifacts: Dict[str, str]
     code: str
     description: Optional[str]
-    group: int
     id: str
     is_initial: bool
     score: Optional[float]
+    tags: Dict[str, Union[str, int]]
 
 
 class Store(ABC):
@@ -26,10 +26,10 @@ class Store(ABC):
         artifacts: Dict[str, str],
         code: str,
         description: Optional[str],
-        group: int,
         is_initial: bool,
         score: Optional[float],
-    ) -> str:
+        tags: Dict[str, Union[str, int]],
+    ) -> None:
         pass
 
     @abstractmethod
@@ -60,27 +60,39 @@ class FileSystemStore(Store):
         # Combine: valid solutions first, then failed solutions
         all_sorted = sorted_valid + failed_solutions
 
+        # Collect all unique tag names and sort them alphabetically
+        all_tag_names: Set[str] = set()
+        for solution in all_sorted:
+            all_tag_names.update(solution.tags.keys())
+        sorted_tag_names = sorted(all_tag_names)
+
         csv_path = self._directory / "solutions.csv"
         with open(csv_path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(["id", "score", "group"])  # Header
+            # Create dynamic headers with t_{tag_name} format
+            tag_headers = [f"t_{tag_name}" for tag_name in sorted_tag_names]
+            writer.writerow(["id", "score"] + tag_headers)  # Header
+
             for solution in all_sorted:
                 score_display = "FAILED" if solution.score is None else solution.score
-                writer.writerow([solution.id, score_display, solution.group])
+                # Create row with tag values in the appropriate columns
+                tag_values = [
+                    solution.tags.get(tag_name, "") for tag_name in sorted_tag_names
+                ]
+                writer.writerow([solution.id, score_display] + tag_values)
 
     def add_solution(
         self,
         artifacts: Dict[str, str],
         code: str,
         description: Optional[str],
-        group: int,
         is_initial: bool,
         score: Optional[float],
-    ) -> str:
-        """Add a solution and return its ID."""
-        solution_id = uuid.uuid4().hex
-        solution_dir = self._directory / solution_id
-        solution_dir.mkdir(parents=True, exist_ok=True)
+        tags: Dict[str, Union[str, int]],
+    ) -> None:
+        id = uuid.uuid4().hex
+        solution_dir = self._directory / id
+        solution_dir.mkdir(parents=True)
 
         # Save the solution code
         solution_path = solution_dir / "solution.txt"
@@ -101,35 +113,28 @@ class FileSystemStore(Store):
 
         # Save metadata
         meta = {
-            "id": solution_id,
-            "group": group,
+            "id": id,
             "is_initial": is_initial,
             "score": score,
+            "tags": tags,
         }
         meta_file = solution_dir / "metadata.json"
         with open(meta_file, "w") as f:
             json.dump(meta, f, indent=2)
 
-        # Update CSV file
         self._write_solutions_csv()
 
-        return solution_id
-
     def remove_solution(self, solution_id: str) -> bool:
-        """Remove a solution by ID. Returns True if found and removed."""
         solution_dir = self._directory / solution_id
         if not solution_dir.exists():
             return False
 
         shutil.rmtree(solution_dir)
-
-        # Update CSV file
         self._write_solutions_csv()
 
         return True
 
     def get_all_solutions(self) -> List[Solution]:
-        """Get all solutions."""
         solutions: List[Solution] = []
 
         if not self._directory.exists():
@@ -171,10 +176,10 @@ class FileSystemStore(Store):
                     artifacts=artifacts,
                     code=file_content,
                     description=description,
-                    group=meta["group"],
                     id=meta["id"],
                     is_initial=meta["is_initial"],
                     score=meta["score"],
+                    tags=meta["tags"],
                 )
                 solutions.append(solution)
 

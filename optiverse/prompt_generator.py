@@ -51,7 +51,7 @@ class EvolutionaryPromptGenerator(PromptGenerator):
     def _select_solutions_explore_groups(
         self, valid_solutions: List[Solution], group: int
     ) -> Tuple[Solution, List[Solution]]:
-        solutions_in_group = [s for s in valid_solutions if s.group == group]
+        solutions_in_group = [s for s in valid_solutions if s.tags["group"] == group]
         if not solutions_in_group:
             return get_initial_solution(valid_solutions), []
 

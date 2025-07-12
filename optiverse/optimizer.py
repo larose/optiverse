@@ -10,9 +10,6 @@ from openai.types.chat import ChatCompletionMessageParam
 logger = logging.getLogger(__name__)
 
 
-SOLUTION_FILE_NAME = "main.py"
-
-
 class Optimizer:
     def __init__(
         self,
@@ -127,9 +124,9 @@ Solution text here
             artifacts=result.artifacts,
             code=file_content,
             description=description,
-            group=prompt_result.group,
             is_initial=False,
             score=result.score,
+            tags={"group": prompt_result.group},
         )
 
         if result.score is None:
@@ -149,9 +146,9 @@ Solution text here
             artifacts=initial_solution_result.artifacts,
             code=self._config.problem.initial_solution,
             description=None,
-            group=0,
             is_initial=True,
             score=initial_solution_result.score,
+            tags={"group": 0},
         )
 
         logger.info(
