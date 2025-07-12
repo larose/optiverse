@@ -9,6 +9,8 @@ import tempfile
 import os
 from typing import Dict, List, Tuple, Optional, Union
 
+from optiverse.strategies import IteratedLocalSearch
+
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -166,6 +168,7 @@ def main():
         evaluator=evaluator,
         prompt_generator=optiverse.prompt_generator.EvolutionaryPromptGenerator(),
         store=optiverse.store.FileSystemStore(directory=store_directory),
+        strategy=IteratedLocalSearch(max_iterations_without_improvements=10),
     )
     optimizer.run()
 

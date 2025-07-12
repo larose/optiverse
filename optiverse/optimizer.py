@@ -1,7 +1,9 @@
 import logging
 import re
 from typing import cast, List
-from .prompt_generator import Context, PromptGenerator
+
+from .strategies import Strategy, StrategyContext
+from .prompt_generator import PromptGenerator, PromptGeneratorContext
 from .evaluator import Evaluator
 from .store import Store
 from .config import Config
@@ -17,22 +19,27 @@ class Optimizer:
         evaluator: Evaluator,
         prompt_generator: PromptGenerator,
         store: Store,
+        strategy: Strategy,
     ):
         self._config = config
         self._evaluator = evaluator
         self._prompt_generator = prompt_generator
         self._store = store
+        self._strategy = strategy
 
     def _do_iteration(self, iteration: int):
-        context = Context(
+        strategy_context = StrategyContext(
             iteration=iteration,
-            max_iterations=self._config.max_iterations,
-            problem=self._config.problem,
             store=self._store,
         )
-        prompt_result = self._prompt_generator.generate(context=context)
 
-        prompt = prompt_result.text
+        strategy_result = self._strategy.apply(context=strategy_context)
+
+        prompt_generator_context = PromptGeneratorContext(
+            strategy_result=strategy_result, problem=self._config.problem
+        )
+
+        prompt = self._prompt_generator.generate(prompt_generator_context)
 
         prompt += """
 # Response
@@ -127,8 +134,9 @@ Solution text here
             is_initial=False,
             metrics=result.metrics,
             score=result.score,
-            tags={"group": prompt_result.group},
+            tags=strategy_result.tags,
         )
+        self._strategy.result(iteration=iteration, score=result.score)
 
         if result.score is None:
             logger.info(f"Saved failed solution with ID: {solution_id} for debugging")
@@ -150,7 +158,7 @@ Solution text here
             is_initial=True,
             metrics=initial_solution_result.metrics,
             score=initial_solution_result.score,
-            tags={"group": 0},
+            tags={},
         )
 
         logger.info(

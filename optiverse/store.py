@@ -15,9 +15,9 @@ class Solution:
     description: Optional[str]
     id: str
     is_initial: bool
-    metrics: Dict[str, Union[int, float]]
+    metrics: Dict[str, Union[float, int]]
     score: Optional[float]
-    tags: Dict[str, Union[str, int]]
+    tags: Dict[str, Union[int, str]]
 
 
 class Store(ABC):
@@ -31,7 +31,7 @@ class Store(ABC):
         metrics: Dict[str, Union[int, float]],
         score: Optional[float],
         tags: Dict[str, Union[str, int]],
-    ) -> None:
+    ) -> str:
         pass
 
     @abstractmethod
@@ -83,11 +83,11 @@ class FileSystemStore(Store):
                 score_display = "FAILED" if solution.score is None else solution.score
                 # Create row with tag values in the appropriate columns
                 tag_values = [
-                    solution.tags.get(tag_name, "") for tag_name in sorted_tag_names
+                    solution.tags.get(tag_name) for tag_name in sorted_tag_names
                 ]
                 # Create row with metric values in the appropriate columns
                 metric_values = [
-                    solution.metrics.get(metric_name, "")
+                    solution.metrics.get(metric_name)
                     for metric_name in sorted_metric_names
                 ]
                 writer.writerow(
@@ -103,7 +103,7 @@ class FileSystemStore(Store):
         metrics: Dict[str, Union[int, float]],
         score: Optional[float],
         tags: Dict[str, Union[str, int]],
-    ) -> None:
+    ) -> str:
         id = uuid.uuid4().hex
         solution_dir = self._directory / id
         solution_dir.mkdir(parents=True)
@@ -138,6 +138,8 @@ class FileSystemStore(Store):
             json.dump(meta, f, indent=2)
 
         self._write_solutions_csv()
+
+        return id
 
     def remove_solution(self, solution_id: str) -> bool:
         solution_dir = self._directory / solution_id
