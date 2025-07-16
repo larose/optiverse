@@ -71,12 +71,20 @@ Solution text here
         logger.debug(prompt)
         logger.debug("=" * 60)
 
-        response = self._config.llm.client.chat.completions.create(
+        completion_stream = self._config.llm.client.chat.completions.create(
             model=self._config.llm.model,
             messages=messages,
+            stream=True,
         )
 
-        response_content = response.choices[0].message.content
+        response_buffer: List[str] = []
+
+        for chunk in completion_stream:
+            content = chunk.choices[0].delta.content
+            if content is not None:
+                response_buffer.append(content)
+
+        response_content = "".join(response_buffer)
 
         # Debug log: LLM output
         logger.debug("=" * 60)
@@ -85,10 +93,6 @@ Solution text here
         logger.debug("Response received from LLM:")
         logger.debug(response_content)
         logger.debug("=" * 60)
-
-        if response_content is None:
-            logger.info("No content received from LLM response")
-            return
 
         # Parse the response to extract explanation and code
         # Look for the first ``` to separate explanation from code
