@@ -46,7 +46,6 @@ class Store(ABC):
 class FileSystemStore(Store):
     def __init__(self, directory: Path):
         self._directory = directory
-        self._directory.mkdir(exist_ok=True, parents=True)
 
     def _write_solutions_csv(self) -> None:
         """Write all solutions to solutions.csv file sorted by score (best first)."""

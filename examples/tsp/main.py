@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from .evaluator import TSPEvaluator
 import optiverse
+import os
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,8 +15,13 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    directory = Path("tmp") / datetime.now().strftime("%Y%m%d_%H%M%S")
-    directory.mkdir(exist_ok=True, parents=True)
+    raw_directory = os.getenv("OPTIVERSE_DIRECTORY")
+
+    if raw_directory is None:
+        directory = Path("tmp") / datetime.now().strftime("%Y%m%d_%H%M%S")
+        directory.mkdir(exist_ok=True, parents=True)
+    else:
+        directory = Path(raw_directory)
 
     evaluator = TSPEvaluator()
 

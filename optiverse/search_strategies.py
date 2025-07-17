@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import random
-from typing import Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 from .store import Solution, Store
 
 
@@ -32,6 +32,14 @@ class SearchStrategy(ABC):
 
     @abstractmethod
     def result(self, iteration: int, score: Optional[float]) -> None:
+        pass
+
+    @abstractmethod
+    def serialize(self) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def deserialize(self, state: Dict[str, Any]) -> None:
         pass
 
 
@@ -146,3 +154,17 @@ class IteratedLocalSearch(SearchStrategy):
             self._num_iterations_without_improvements = 0
         else:
             self._num_iterations_without_improvements += 1
+
+    def serialize(self) -> Dict[str, Any]:
+        return {
+            "group": self._group,
+            "best_score": self._best_score,
+            "num_iterations_without_improvements": self._num_iterations_without_improvements,
+        }
+
+    def deserialize(self, state: Dict[str, Any]) -> None:
+        self._group = state["group"]
+        self._best_score = state["best_score"]
+        self._num_iterations_without_improvements = state[
+            "num_iterations_without_improvements"
+        ]
