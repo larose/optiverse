@@ -16,10 +16,16 @@ Follow these steps to set up Optiverse and run an example.
 
 ### 1. Set Up Environment
 
-Create a virtual environment and install dependencies:
+First, create a virtual environment and install dependencies:
 
 ```bash
 make init
+```
+
+Then, activate the virtual environment:
+
+```bash
+source venv/bin/activate
 ```
 
 ### 2. Run the Traveling Salesman Problem example:
