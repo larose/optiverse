@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List
-from .strategies import StrategyResult
+from .search_strategies import SearchResult
 from .config import Problem
 
 
 @dataclass
 class PromptGeneratorContext:
     problem: Problem
-    strategy_result: StrategyResult
+    strategy_result: SearchResult
 
 
 class PromptGenerator(ABC):

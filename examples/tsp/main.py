@@ -29,7 +29,7 @@ def main():
         llm=optiverse.config.create_llm_config_from_env(),
         max_iterations=100,
         problem=problem,
-        search_strategy=optiverse.strategies.IteratedLocalSearch(
+        search_strategy=optiverse.search_strategies.IteratedLocalSearch(
             max_iterations_without_improvements=10
         ),
         directory=directory,

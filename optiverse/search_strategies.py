@@ -6,7 +6,7 @@ from .store import Solution, Store
 
 
 @dataclass
-class StrategyContext:
+class SearchContext:
     iteration: int
     store: Store
 
@@ -19,15 +19,15 @@ class SolutionWithTitle:
 
 
 @dataclass
-class StrategyResult:
+class SearchResult:
     solutions: List[SolutionWithTitle]
     tags: Dict[str, Union[int, str]]
     task: str
 
 
-class Strategy(ABC):
+class SearchStrategy(ABC):
     @abstractmethod
-    def apply(self, context: StrategyContext) -> StrategyResult:
+    def apply(self, context: SearchContext) -> SearchResult:
         pass
 
     @abstractmethod
@@ -43,14 +43,14 @@ def get_initial_solution(solutions: List[Solution]) -> Solution:
     raise ValueError("No initial solution found.")
 
 
-class IteratedLocalSearch(Strategy):
+class IteratedLocalSearch(SearchStrategy):
     def __init__(self, max_iterations_without_improvements: int):
         self._group = 0
         self._best_score = float("inf")
         self._num_iterations_without_improvements = 0
         self._max_iterations_without_improvements = max_iterations_without_improvements
 
-    def _improve(self, solutions: List[Solution]) -> StrategyResult:
+    def _improve(self, solutions: List[Solution]) -> SearchResult:
         solutions_in_current_group = [
             s
             for s in solutions
@@ -64,21 +64,21 @@ class IteratedLocalSearch(Strategy):
             solutions_in_current_group, key=lambda x: cast(float, x.score)
         )
 
-        return StrategyResult(
+        return SearchResult(
             solutions=[SolutionWithTitle(solution=sorted_solutions[0], title="Parent")],
             tags={"move": "improve", "group": self._group},
             task="Improve the parent solution",
         )
 
-    def _initial_solution(self, solutions: List[Solution]) -> StrategyResult:
+    def _initial_solution(self, solutions: List[Solution]) -> SearchResult:
         initial_solution = get_initial_solution(solutions)
-        return StrategyResult(
+        return SearchResult(
             solutions=[SolutionWithTitle(solution=initial_solution, title="Parent")],
             tags={"move": "initial", "group": self._group},
             task="Improve the parent solution",
         )
 
-    def _perturb(self, solutions: List[Solution]) -> StrategyResult:
+    def _perturb(self, solutions: List[Solution]) -> SearchResult:
         self._best_score = float("inf")
         self._group += 1
         self._num_iterations_without_improvements = 0
@@ -120,7 +120,7 @@ class IteratedLocalSearch(Strategy):
             for i, s in enumerate(parents)
         ]
 
-        return StrategyResult(
+        return SearchResult(
             solutions=solution_with_titles,
             tags={
                 "move": "perturb",
@@ -129,7 +129,7 @@ class IteratedLocalSearch(Strategy):
             task=f"Create a new solution based on these {len(solution_with_titles)} solutions",
         )
 
-    def apply(self, context: StrategyContext) -> StrategyResult:
+    def apply(self, context: SearchContext) -> SearchResult:
         solutions = context.store.get_all_solutions()
 
         if (

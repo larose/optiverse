@@ -2,7 +2,7 @@ from . import config
 from . import evaluator
 from . import prompt_generator
 from . import store
-from . import strategies
+from . import search_strategies
 from . import optimizer
 
 
@@ -11,6 +11,6 @@ __all__ = [
     "evaluator",
     "prompt_generator",
     "store",
-    "strategies",
+    "search_strategies",
     "optimizer",
 ]

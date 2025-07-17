@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Callable
 from openai import OpenAI
 from .evaluator import Evaluator
-from .strategies import Strategy
+from .search_strategies import SearchStrategy
 
 
 @dataclass
@@ -25,7 +25,7 @@ class OptimizerConfig:
     llm: LLMConfig
     max_iterations: int
     problem: Problem
-    search_strategy: Strategy
+    search_strategy: SearchStrategy
     directory: Path
 
 

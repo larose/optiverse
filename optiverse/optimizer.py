@@ -1,7 +1,7 @@
 import logging
 from typing import cast
 
-from .strategies import StrategyContext
+from .search_strategies import SearchContext
 from .prompt_generator import DefaultPromptGenerator, PromptGeneratorContext
 from .store import FileSystemStore
 from .config import OptimizerConfig
@@ -19,15 +19,15 @@ class Optimizer:
         self._llm_client = LLMClient(llm_config=config.llm)
 
         self._evaluator = config.problem.evaluator
-        self._strategy = config.search_strategy
+        self._search_strategy = config.search_strategy
 
     def _do_iteration(self, iteration: int):
-        strategy_context = StrategyContext(
+        strategy_context = SearchContext(
             iteration=iteration,
             store=self._store,
         )
 
-        strategy_result = self._strategy.apply(context=strategy_context)
+        strategy_result = self._search_strategy.apply(context=strategy_context)
 
         prompt_generator_context = PromptGeneratorContext(
             strategy_result=strategy_result, problem=self._config.problem
@@ -74,7 +74,7 @@ class Optimizer:
             score=result.score,
             tags=enhanced_tags,
         )
-        self._strategy.result(iteration=iteration, score=result.score)
+        self._search_strategy.result(iteration=iteration, score=result.score)
 
         if result.score is None:
             logger.info(f"Saved failed solution with ID: {solution_id} for debugging")
