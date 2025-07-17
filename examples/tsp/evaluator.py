@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 import optiverse
 import shutil
@@ -7,6 +8,29 @@ from typing import Dict, List, Tuple, Optional, Union
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class NestedFunctionDetector(ast.NodeVisitor):
+    def __init__(self):
+        self.function_depth = 0
+        self.has_nested = False
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        if self.function_depth > 0:
+            self.has_nested = True
+            return
+        self.function_depth += 1
+        self.generic_visit(node)
+        self.function_depth -= 1
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        # If you also want to detect async nested functions
+        if self.function_depth > 0:
+            self.has_nested = True
+            return
+        self.function_depth += 1
+        self.generic_visit(node)
+        self.function_depth -= 1
 
 
 class TSPEvaluator(optiverse.evaluator.Evaluator):
@@ -91,6 +115,17 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
             timeout=40,
         )
 
+    def _has_nested_functions(self, code: str) -> bool:
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # If code can't be parsed, let normal evaluation handle the error
+            return False
+
+        detector = NestedFunctionDetector()
+        detector.visit(tree)
+        return detector.has_nested
+
     def _run(self, temp_dir: Path) -> Tuple[Optional[float], str, str]:
         """
         Execute the runner and extract the tour distance.
@@ -122,5 +157,14 @@ class TSPEvaluator(optiverse.evaluator.Evaluator):
         return None, stdout, stderr
 
     def evaluate(self, code: str) -> optiverse.evaluator.EvaluatorResult:
+        # Check for nested functions first
+        if self._has_nested_functions(code):
+            return optiverse.evaluator.EvaluatorResult(
+                artifacts={"error.txt": "Solution rejected: Contains nested functions"},
+                metrics={"line_count": code.count("\n")},
+                score=None,
+            )
+
+        # Continue with normal evaluation
         with tempfile.TemporaryDirectory() as temp_dir:
             return self._evaluate_in_temp_dir(code=code, temp_dir=Path(temp_dir))

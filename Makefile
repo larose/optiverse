@@ -36,7 +36,7 @@ run.tsp:
 	$(PYTHON) -m examples.tsp.main
 
 .PHONY: test
-test: test.format test.types
+test: test.format test.types test.unit
 
 .PHONY: test.format
 test.format:
@@ -45,3 +45,7 @@ test.format:
 .PHONY: test.types
 test.types:
 	$(VENV)/bin/pyright
+
+.PHONY: test.unit
+test.unit:
+	$(PYTHON) -m unittest discover -s . -p "*_test.py" -v
