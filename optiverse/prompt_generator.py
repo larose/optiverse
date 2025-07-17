@@ -17,7 +17,7 @@ class PromptGenerator(ABC):
         pass
 
 
-class EvolutionaryPromptGenerator(PromptGenerator):
+class DefaultPromptGenerator(PromptGenerator):
 
     def generate(self, context: PromptGeneratorContext) -> str:
         solutions_section_buffer: List[str] = []
