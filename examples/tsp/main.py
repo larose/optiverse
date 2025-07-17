@@ -1,10 +1,8 @@
 from datetime import datetime
 import logging
 from pathlib import Path
-from openai import OpenAI
 from .evaluator import TSPEvaluator
 import optiverse
-import os
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,13 +26,7 @@ def main():
     )
 
     config = optiverse.config.OptimizerConfig(
-        llm=optiverse.config.LLMConfig(
-            model="gemini-2.0-flash",
-            client=OpenAI(
-                api_key=os.getenv("GEMINI_API_KEY"),
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            ),
-        ),
+        llm=optiverse.config.create_llm_config_from_env(),
         max_iterations=100,
         problem=problem,
         search_strategy=optiverse.strategies.IteratedLocalSearch(

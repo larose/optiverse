@@ -24,15 +24,20 @@ make init
 
 ### 2. Run the Traveling Salesman Problem example:
 
+This example uses Optiverse to solve the [Traveling Salesman Problem (TSP)](https://en.wikipedia.org/wiki/Travelling_salesman_problem). The code is in the [examples/tsp](examples/tsp) directory.
 
-This example uses Optiverse to solve the [Traveling Salesman Problem (TSP)](https://en.wikipedia.org/wiki/Travelling_salesman_problem) with Gemini as the default LLM. The code is in the [examples/tsp](examples/tsp) directory. To run it, set your Gemini API key (you can switch to another LLM provider, see notes below):
+The example supports multiple LLM providers through environment variables:
+- `LLM_API_KEY`: Your API key for the chosen provider
+- `LLM_MODEL`: The model name to use
+- `LLM_PROVIDER`: The provider name (`openai`, `google`, or `nvidia`)
 
+Example with Google Gemini:
 
 ```bash
-GEMINI_API_KEY=YOUR_GEMINI_KEY make run.tsp
+LLM_API_KEY="your-gemini-api-key" LLM_MODEL="gemini-2.0-flash" LLM_PROVIDER="google" make run.tsp
 ```
 
-Note: You can easily switch to other LLM providers if they're compatible with the `openai` Python package (e.g., Anthropic or a local model). Just update the `base_url` in the example code.
+Note: Optiverse uses the OpenAI package under the hood, so it supports any LLM provider that follows the OpenAI API standard.
 
 ### Sample Output:
 
