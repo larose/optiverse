@@ -2,22 +2,24 @@ Implement a heuristic solver for the Traveling Salesman Problem (TSP) in Python 
 
 ## Requirements
 
-You MUST define a `solve` function with the signature shown below. Any helper functions MUST also be defined at the top level (not nested).
+Define a `solve` function with the following signature:
 
 ```
 def solve(context: Context) -> None:
     ...
 ```
 
-You MUST NOT modify the `Context` class or its interface.
+Define any helper functions at the top level (do not nest functions).
 
-You MUST submit only valid tours covering all cities exactly once, forming a loop.
+Do not modify the `Context` class or its interface.
 
-You MUST ensure solutions are reported before the time limit expires. Solutions reported after the time limit will be ignored.
+Submit only valid tours that visit each city exactly once and form a closed loop.
 
-You MUST use only the Python Standard Library; external packages are not allowed.
+Ensure that solutions are reported before the time limit expires. Solutions reported after the time limit will be ignored.
 
-You SHOULD call `context.report_new_best_solution(solution)` only when a better solution is found to minimise overhead.
+Use only the Python Standard Library; external packages are not allowed.
+
+Call `context.report_new_best_solution(solution)` only when a better solution is found to minimise overhead.
 
 ## `Context` Interface
 
@@ -48,4 +50,4 @@ class Context:
 
 ## Evaluation Criteria
 
-The score is the total length of the last valid tour submitted before the time limit.
+Your score is the total length of the last valid tour submitted before the time limit.

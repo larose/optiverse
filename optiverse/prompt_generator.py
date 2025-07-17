@@ -52,8 +52,7 @@ class DefaultPromptGenerator(PromptGenerator):
 
         solutions_section = "\n".join(solutions_section_buffer)
 
-        text = f"""
-# Problem description
+        text = f"""# Problem description
 
 {context.problem.description}
 
