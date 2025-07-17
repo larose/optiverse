@@ -14,43 +14,44 @@ class SolutionResponse:
     description: Optional[str]
 
 
-class SolutionGenerator:
+def create_system_prompt() -> str:
+    return """You are an expert software developer. Follow the response format exactly as specified - no more, no less.
+
+Your response must include only the following two parts, in this order:
+
+1. A concise, self-contained plain-text description of the solution in bullet points. Use simple bullet points without any additional formatting, headlines, or references to prior solutions.
+2. The complete solution code enclosed strictly within triple backticks (```). Do not include any additional text inside or outside the code block, apart from the bullet-point description above.
+
+Example:
+
+- Description bullet point 1
+- Description bullet point 2
+- Description bullet point 3
+
+```
+Solution code
+```"""
+
+
+class LLMClient:
     def __init__(self, llm_config: LLMConfig):
         self._llm_config = llm_config
 
     def generate(self, prompt: str) -> SolutionResponse:
-        # Enhance prompt with response format instructions
-        enhanced_prompt = (
-            prompt
-            + """
-# Response
-
-Your response must include:
-
-1. A plain-text description in bullet-point style (no formatting, no headline). Assume no prior context.
-2. Your solution
-
-Example:
-
-- Description line 1
-- Description line 2
-...
-
-```
-Solution text here
-```
-"""
-        )
+        system_prompt = create_system_prompt()
 
         messages: List[ChatCompletionMessageParam] = [
-            {"role": "user", "content": enhanced_prompt}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
         ]
 
         logger.debug("=" * 60)
         logger.debug("=== LLM INPUT ===")
         logger.debug("=" * 60)
-        logger.debug("Prompt being sent to LLM:")
-        logger.debug(enhanced_prompt)
+        logger.debug("System prompt:")
+        logger.debug(system_prompt)
+        logger.debug("User prompt:")
+        logger.debug(prompt)
         logger.debug("=" * 60)
 
         completion_stream = self._llm_config.client.chat.completions.create(
