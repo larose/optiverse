@@ -1,14 +1,27 @@
 # Optiverse
 
-Optiverse is a Python library for evolving code and algorithms using Large Language Models (LLMs). It's inspired by DeepMind's [AlphaEvolve](https://deepmind.google/discover/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/).
+Optiverse is a Python library designed for evolving code and algorithms using Large Language Models (LLMs). Inspired by Deepmind's [AlphaEvolve](https://deepmind.google/discover/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/), it provides a flexible framework to iteratively improve programs, from code snippets to full files, in any programming language.
+
+With Optiverse, you define a problem and provide an evaluator. The system then generates and evolves candidate solutions over multiple iterations, learning which approaches yield better results.
 
 📖 **Read the announcement post:** [Optiverse: Evolving Code with LLMs](https://mathieularose.com/optiverse-evolving-code-with-llms)
 
-
 ## Table of Contents
 
+
+- [Why Optiverse?](#why-optiverse)
 - [Quick Start](#quick-start)
+- [Evolved Solutions](#evolved-solutions)
 - [License](#license)
+
+## Why Optiverse?
+
+Optiverse helps developers and researchers automate code improvement by evolving and refining solutions with LLMs. Key capabilities include:
+
+- **Whole-file evolution**: Unlike other implementations limited to isolated code blocks, Optiverse evolves entire source files.
+- **Modular architecture**: Swap out search strategies easily to experiment with different optimization approaches.
+- **Multi-language support**: As long as you provide an evaluator for your problem, Optiverse can optimize code in any programming language.
+- **Flexible LLM integration**: Works with any LLM provider compatible with the OpenAI API standard, such as OpenAI, Google Gemini, NVIDIA, and more.
 
 ## Quick Start
 
@@ -98,6 +111,191 @@ Each solution has a dedicated directory named after its ID, containing:
 - `metadata.json`: Metadata including ID and score.
 - `*_stdout.txt` and `*_strerr.txt`: Program logs for debugging.
 
+
+## Evolved Solutions
+
+### Traveling Salesman Problem (TSP)
+
+#### Problem Summary
+
+The Traveling Salesman Problem (TSP) requires finding the shortest possible route visiting each city exactly once and returning to the start. It’s a standard benchmark for combinatorial optimization algorithms.
+
+The full problem description is in [examples/tsp/problem.md](examples/tsp/problem.md).
+
+#### Initial Solution
+
+The initial solution simply generates a random permutation of cities:
+
+```python
+from datetime import timedelta
+import random
+from context import Context
+
+
+def solve(context: Context) -> None:
+    num_cities = len(context.instance)
+
+    while context.remaining_time() > timedelta():
+        # Generate a random solution (permutation of city indices)
+        solution = random.sample(range(num_cities), num_cities)
+        context.report_new_best_solution(solution)
+        break  # since it's pointless to continue in this example
+```
+
+#### Evolved Algorithm
+
+Through iterative evolution, Optiverse transformed the initial solution into an Iterated Local Search (ILS) variant, including:
+
+- Intensification (improvement phase): 2-opt local search with delta evaluation for efficient improvements.
+- Diversification (perturbation phase): Perturbation operators such as ruin-and-recreate, block moves, swaps, and double bridge moves.
+- Performance optimizations: Precomputed distance matrix for faster evaluation.
+
+#### Evolution Setup
+
+- Iterations: ~300
+- LLM model: Qwen3-235B-A22B
+
+
+#### Evaluation Results
+
+On a 280-city instance (3 runs of 30 seconds each), the evolved algorithm achieved an average tour length of 2593, within ~0.5% of the known optimal (2579).
+
+#### Full Evolved Code
+
+```python
+import random
+import math
+from datetime import timedelta
+from typing import List, Tuple
+from context import Context
+
+def compute_tour_length(tour: List[int], dist_matrix: List[List[float]]) -> float:
+    length = 0.0
+    n = len(tour)
+    for i in range(n):
+        a, b = tour[i], tour[(i+1)%n]
+        length += dist_matrix[a][b]
+    return length
+
+def nearest_neighbor(instance: List[Tuple[float, float]], start: int, dist_matrix: List[List[float]], nearest_neighbors: List[List[int]]) -> List[int]:
+    n = len(instance)
+    visited = [False]*n
+    tour, current = [start], start
+    visited[start] = True
+    while len(tour) < n:
+        for city in nearest_neighbors[current]:
+            if not visited[city]:
+                next_city = city
+                break
+        tour.append(next_city)
+        visited[next_city] = True
+        current = next_city
+    return tour
+
+def two_opt(tour: List[int], dist_matrix: List[List[float]]) -> List[int]:
+    tour = tour.copy()
+    n = len(tour)
+    improved = True
+    while improved:
+        improved = False
+        for i in range(n-1):
+            for j in range(i+2, n):
+                a, b = tour[i], tour[i+1]
+                c, d = tour[j-1], tour[j]
+                if dist_matrix[a][b] + dist_matrix[c][d] > dist_matrix[a][c] + dist_matrix[b][d]:
+                    tour[i+1:j] = tour[i+1:j][::-1]
+                    improved = True
+    return tour
+
+def solve(context: Context) -> None:
+    instance = context.instance
+    n = len(instance)
+    if n <= 1:
+        context.report_new_best_solution(list(range(n)))
+        return
+
+    dist_matrix = [[math.hypot(x1-x2, y1-y2) for x2, y2 in instance] for x1, y1 in instance]
+
+    nearest_neighbors = []
+    for u in range(n):
+        sorted_cities = sorted(range(n), key=lambda c: dist_matrix[u][c])
+        nearest_neighbors.append(sorted_cities)
+
+    best_solution, best_length = None, float('inf')
+    start_points = [0, n//4, n//2, (3*n)//4, n-1]
+    if n >= 8:
+        start_points += random.sample(range(n), 3)
+
+    for start in start_points:
+        if context.remaining_time() <= timedelta(seconds=1):
+            break
+        tour = nearest_neighbor(instance, start, dist_matrix, nearest_neighbors)
+        optimized = two_opt(tour, dist_matrix)
+        current_length = compute_tour_length(optimized, dist_matrix)
+        if current_length < best_length:
+            best_solution, best_length = optimized, current_length
+            context.report_new_best_solution(best_solution)
+
+    while context.remaining_time() > timedelta(seconds=0.1) and best_solution:
+        new_solution = best_solution.copy()
+        move = random.random()
+        n_cities = len(best_solution)
+
+        if move < 0.2:  # Ruin and Recreate
+            remove_count = max(2, int(n_cities * 0.2))
+            removed = random.sample(best_solution, remove_count)
+            current_tour = [city for city in best_solution if city not in removed]
+            for city in removed:
+                best_pos, best_delta = 0, float('inf')
+                for i in range(len(current_tour)):
+                    a = current_tour[i]
+                    b = current_tour[(i+1) % len(current_tour)]
+                    delta = dist_matrix[a][city] + dist_matrix[city][b] - dist_matrix[a][b]
+                    if delta < best_delta:
+                        best_delta, best_pos = delta, i
+                current_tour.insert(best_pos + 1, city)
+            new_solution = current_tour
+
+        elif move < 0.4:  # Block move
+            i = random.randint(0, n_cities-3)
+            j = random.randint(i+1, n_cities-1)
+            block = new_solution[i+1:j+1]
+            if random.random() < 0.5:
+                block = block[::-1]
+            new_solution = new_solution[:i+1] + new_solution[j+1:]
+            k = random.randint(0, len(new_solution)-1)
+            new_solution = new_solution[:k+1] + block + new_solution[k+1:]
+
+        elif move < 0.6:  # Swap
+            i, j = random.sample(range(n_cities), 2)
+            new_solution[i], new_solution[j] = new_solution[j], new_solution[i]
+
+        else:  # Double bridge
+            if n_cities < 4:
+                i, j = random.sample(range(n_cities), 2)
+                new_solution[i], new_solution[j] = new_solution[j], new_solution[i]
+            else:
+                a, b, c, d = sorted(random.sample(range(n_cities), 4))
+                new_solution = (new_solution[:a+1] +
+                               new_solution[c+1:d+1] +
+                               new_solution[a+1:b+1][::-1] +
+                               new_solution[b+1:c+1] +
+                               new_solution[d+1:])
+
+        optimized = two_opt(new_solution, dist_matrix)
+        new_length = compute_tour_length(optimized, dist_matrix)
+        if new_length < best_length:
+            best_solution, best_length = optimized, new_length
+            context.report_new_best_solution(best_solution)
+
+    if best_solution is None:
+        solution = list(range(n))
+        random.shuffle(solution)
+        context.report_new_best_solution(solution)
+    else:
+        final_tour = two_opt(best_solution, dist_matrix)
+        context.report_new_best_solution(final_tour)
+```
 
 ## License
 
