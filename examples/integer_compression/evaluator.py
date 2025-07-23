@@ -6,32 +6,41 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import optiverse
+from data_generator import generate_test_files
 
 logger = logging.getLogger(__name__)
 
 
 class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
+    def __init__(self, force_regen: bool = False) -> None:
+        super().__init__()
+        self._force_regen = force_regen
+
     def _evaluate_in_temp_dir(
         self, code: str, temp_dir: Path
     ) -> optiverse.evaluator.EvaluatorResult:
-        """Evaluate Go compression solution in temporary directory"""
-
+        # Generate test data files
+        solution_dir = Path(__file__).parent / "solution"
+        generate_test_files(solution_dir, self._force_regen)
         # Write the compressor.go file
         Path(temp_dir / "compressor.go").write_text(code)
 
         # Copy necessary files
-        solution_dir = Path(__file__).parent / "solution"
         shutil.copy2(solution_dir / "main.go", temp_dir / "main.go")
         shutil.copy2(solution_dir / "go.mod", temp_dir / "go.mod")
+
+        # Copy test data files to temp directory
+        for filename in ["data_a.bin", "data_b.bin", "data_c.bin"]:
+            shutil.copy2(solution_dir / filename, temp_dir / filename)
 
         metrics: Dict[str, Union[int, float]] = {}
         artifacts: Dict[str, str] = {}
 
         # Test on different datasets
         test_configs = [
-            ("test_data_small.bin", "small"),
-            ("test_data_medium.bin", "medium"),
-            ("test_data_large.bin", "large"),
+            ("data_a.bin", "a"),
+            ("data_b.bin", "b"),
+            ("data_c.bin", "c"),
         ]
 
         overall_decompression_times: List[float] = []

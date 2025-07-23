@@ -1,132 +1,13 @@
 package main
 
 import (
-	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"os"
 	"time"
 )
 
-// Expected hashes for deterministic test data files
-var expectedHashes = map[string]string{
-	"test_data_small.bin":  "",  // Will be computed on first run
-	"test_data_medium.bin": "",  // Will be computed on first run
-	"test_data_large.bin":  "",  // Will be computed on first run
-}
-
-func generateTestData(filename string, seed int64, size int) error {
-	rng := rand.New(rand.NewSource(seed))
-	data := make([]uint32, size)
-
-	for i := 0; i < size; i++ {
-		switch filename {
-		case "test_data_small.bin":
-			// Sequential pattern for small data
-			data[i] = uint32(i + 1)
-		case "test_data_medium.bin":
-			// Random values for medium data
-			data[i] = rng.Uint32() % 1000000
-		case "test_data_large.bin":
-			// Mixed patterns for large data
-			if i%3 == 0 {
-				data[i] = uint32(i/3 + 1) // Some duplicates
-			} else if i%3 == 1 {
-				data[i] = rng.Uint32() % 10000000 // Random values
-			} else {
-				data[i] = uint32(i) // Sequential
-			}
-		}
-	}
-
-	return writeUint32Array(filename, data)
-}
-
-func writeUint32Array(filename string, data []uint32) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	for _, val := range data {
-		bytes := make([]byte, 4)
-		binary.LittleEndian.PutUint32(bytes, val)
-		if _, err := file.Write(bytes); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func calculateFileHash(filename string) (string, error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return "", err
-	}
-
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:]), nil
-}
-
-func ensureTestDataExists(filename string) error {
-	// Define seed and size for each file
-	var seed int64
-	var size int
-
-	switch filename {
-	case "test_data_small.bin":
-		seed = 12345
-		size = 1000
-	case "test_data_medium.bin":
-		seed = 67890
-		size = 10000
-	case "test_data_large.bin":
-		seed = 54321
-		size = 100000
-	default:
-		return fmt.Errorf("unknown test data file: %s", filename)
-	}
-
-	// Check if file exists and has correct hash
-	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		fmt.Printf("Generating %s...\n", filename)
-		if err := generateTestData(filename, seed, size); err != nil {
-			return fmt.Errorf("failed to generate %s: %v", filename, err)
-		}
-	}
-
-	// Verify hash if we have an expected hash
-	currentHash, err := calculateFileHash(filename)
-	if err != nil {
-		return fmt.Errorf("failed to calculate hash for %s: %v", filename, err)
-	}
-
-	expectedHash := expectedHashes[filename]
-	if expectedHash == "" {
-		// First time - store the hash
-		expectedHashes[filename] = currentHash
-		fmt.Printf("Stored hash for %s: %s\n", filename, currentHash)
-	} else if currentHash != expectedHash {
-		// Hash mismatch - regenerate
-		fmt.Printf("Hash mismatch for %s, regenerating...\n", filename)
-		if err := generateTestData(filename, seed, size); err != nil {
-			return fmt.Errorf("failed to regenerate %s: %v", filename, err)
-		}
-	}
-
-	return nil
-}
-
 func loadTestData(filename string) ([]uint32, error) {
-	// Ensure the test data file exists with correct hash
-	if err := ensureTestDataExists(filename); err != nil {
-		return nil, err
-	}
-
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err

@@ -23,19 +23,19 @@ def main():
     else:
         directory = Path(raw_directory)
 
-    evaluator = IntegerCompressionEvaluator()
-
     problem = optiverse.config.Problem(
         description=open(Path(__file__).parent / "problem.md").read(),
         initial_solution=open(
             Path(__file__).parent / "solution" / "compressor.go"
         ).read(),
-        evaluator=evaluator,
+        evaluator=IntegerCompressionEvaluator(
+            force_regen=os.getenv("FORCE_REGEN_DATA") == "1"
+        ),
     )
 
     config = optiverse.config.OptimizerConfig(
         llm=optiverse.config.create_llm_config_from_env(),
-        max_iterations=100,
+        max_iterations=10_000,
         problem=problem,
         search_strategy=optiverse.search_strategies.IteratedLocalSearch(
             max_iterations_without_improvements=10
