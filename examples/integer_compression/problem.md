@@ -21,6 +21,6 @@ Handle errors appropriately and return them.
 
 ## Evaluation Criteria
 
-Your score is the average decompression time in nanoseconds. Lower is better.
+Your score is the average decompression time in milliseconds. Lower is better.
 
 Secondary metrics include compression ratio and compression time.

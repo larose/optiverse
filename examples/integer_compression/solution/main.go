@@ -55,41 +55,33 @@ func main() {
 	compressionTime := time.Since(start)
 	compressedSize := len(compressed)
 
-	// Measure decompression (multiple runs for accuracy)
-	const numRuns = 10
-	var totalDecompTime time.Duration
+	// Measure decompression
+	start = time.Now()
+	decompressed, err := Decompress(compressed)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Decompression error: %v\n", err)
+		os.Exit(1)
+	}
+	decompressionTime := time.Since(start)
 
-	for i := 0; i < numRuns; i++ {
-		start = time.Now()
-		decompressed, err := Decompress(compressed)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Decompression error: %v\n", err)
+	// Verify correctness
+	if len(decompressed) != len(data) {
+		fmt.Fprintf(os.Stderr, "Length mismatch: got %d, expected %d\n",
+			len(decompressed), len(data))
+		os.Exit(1)
+	}
+	for j := range data {
+		if decompressed[j] != data[j] {
+			fmt.Fprintf(os.Stderr, "Data mismatch at index %d: got %d, expected %d\n",
+				j, decompressed[j], data[j])
 			os.Exit(1)
-		}
-		totalDecompTime += time.Since(start)
-
-		// Verify correctness on first run
-		if i == 0 {
-			if len(decompressed) != len(data) {
-				fmt.Fprintf(os.Stderr, "Length mismatch: got %d, expected %d\n",
-					len(decompressed), len(data))
-				os.Exit(1)
-			}
-			for j := range data {
-				if decompressed[j] != data[j] {
-					fmt.Fprintf(os.Stderr, "Data mismatch at index %d: got %d, expected %d\n",
-						j, decompressed[j], data[j])
-					os.Exit(1)
-				}
-			}
 		}
 	}
 
-	avgDecompTime := totalDecompTime / numRuns
 	compressionRatio := float64(originalSize) / float64(compressedSize)
 
 	// Output metrics with >>> prefix
-	fmt.Printf(">>> decompression_time: %d\n", avgDecompTime.Nanoseconds())
+	fmt.Printf(">>> decompression_time: %d\n", decompressionTime.Milliseconds())
 	fmt.Printf(">>> compression_ratio: %.3f\n", compressionRatio)
-	fmt.Printf(">>> compression_time: %d\n", compressionTime.Nanoseconds())
+	fmt.Printf(">>> compression_time: %d\n", compressionTime.Milliseconds())
 }
