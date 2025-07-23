@@ -1,7 +1,7 @@
 from datetime import datetime
 import logging
 from pathlib import Path
-from .evaluator import IntegerCompressionEvaluator
+from evaluator import IntegerCompressionEvaluator
 import optiverse
 import os
 
