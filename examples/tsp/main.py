@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    raw_directory = os.getenv("OPTIVERSE_DIRECTORY")
+    raw_directory = os.getenv("DIRECTORY")
 
     if raw_directory is None:
         directory = Path("tmp") / datetime.now().strftime("%Y%m%d_%H%M%S")

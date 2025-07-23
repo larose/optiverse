@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    raw_directory = os.getenv("OPTIVERSE_DIRECTORY")
+    raw_directory = os.getenv("DIRECTORY")
+    force_regen = os.getenv("FORCE_REGEN_DATA") == "1"
 
     if raw_directory is None:
         directory = Path("tmp") / datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -28,9 +29,7 @@ def main():
         initial_solution=open(
             Path(__file__).parent / "solution" / "compressor.go"
         ).read(),
-        evaluator=IntegerCompressionEvaluator(
-            force_regen=os.getenv("FORCE_REGEN_DATA") == "1"
-        ),
+        evaluator=IntegerCompressionEvaluator(force_regen=force_regen),
     )
 
     config = optiverse.config.OptimizerConfig(
