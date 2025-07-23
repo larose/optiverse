@@ -30,14 +30,12 @@ logger = logging.getLogger(__name__)
 
 
 class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
-    def __init__(self, force_regen: bool) -> None:
-        self._force_regen = force_regen
 
     def _setup_temp_directory(self, code: str, temp_dir: Path) -> None:
         """Setup temporary directory with necessary files"""
         # Generate test data files
         solution_dir = Path(__file__).parent / "solution"
-        generate_test_files(solution_dir, self._force_regen)
+        generate_test_files(solution_dir)
 
         # Write the compressor.go file
         Path(temp_dir / "compressor.go").write_text(code)
