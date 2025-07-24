@@ -140,9 +140,8 @@ class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
             metrics[f"{size_name}_compression_ratio"] = stats.avg_compression_ratio
             metrics[f"{size_name}_compression_time"] = stats.avg_compression_time
 
-            # For overall score calculation, we assume each dataset ran 3 times
-            # since that's what _run_single_dataset_test does
-            overall_decompression_times.extend([stats.avg_decompression_time] * 3)
+            # Add the average decompression time for this dataset
+            overall_decompression_times.append(stats.avg_decompression_time)
 
         # Calculate overall score
         score = (
