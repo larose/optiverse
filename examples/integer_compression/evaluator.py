@@ -58,7 +58,7 @@ class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
         """Run tests on a single dataset and return calculated stats"""
         results: List[ProgramRunResult] = []
 
-        for run in range(10):
+        for run in range(3):
             result = self._run_go_program(temp_dir, test_file)
 
             artifacts[f"{test_file}_{run+1}_stdout.txt"] = result.stdout

@@ -33,7 +33,6 @@ def generate_test_files(target_dir: Path) -> None:
         filepath = target_dir / filename
 
         if filepath.exists():
-            print(f"{filename} exists")
             continue
 
         print(f"Generating {filename} with {SIZE_PER_FILE:,} integers...")
