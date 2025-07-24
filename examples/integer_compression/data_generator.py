@@ -1,45 +1,46 @@
-import random
-import struct
+import gzip
+import urllib.request
 from pathlib import Path
 
 
-SIZE_PER_FILE = 10_000_000
-SEEDS = {
-    "data_a.bin": 12345,
-    "data_b.bin": 67890,
-    "data_c.bin": 54321,
-}
+def download_ts_data(target_dir: Path) -> None:
+    """Download and extract ts.txt data file if it doesn't exist"""
+    target_dir.mkdir(parents=True, exist_ok=True)
 
+    ts_file = target_dir / "ts.txt"
 
-def generate_random_data(seed: int, size: int) -> bytes:
-    """Generate sorted uint32 data with given seed"""
-    rng = random.Random(seed)
+    # Check if file already exists (cache)
+    if ts_file.exists():
+        print(f"ts.txt already exists in {target_dir}, skipping download")
+        return
 
-    # Generate random integers efficiently
-    values = [rng.randint(0, 2**32 - 1) for _ in range(size)]
+    print("Downloading ts.txt.gz from zentures/encoding repository...")
 
-    # Sort to create sorted integer sequence
-    values.sort()
+    # Source: https://github.com/vteromero/integer-compression-benchmarks
+    # URL to the compressed data file
+    url = "https://github.com/zentures/encoding/raw/b90e310a0325f9b765b4be7220df3642ad93ad8d/benchmark/data/ts.txt.gz"
 
-    # Pack all values at once using batch packing for efficiency
-    return struct.pack(f"<{size}I", *values)
+    try:
+        # Download the gzipped file
+        with urllib.request.urlopen(url) as response:
+            compressed_data = response.read()
+
+        print("Extracting ts.txt...")
+
+        # Decompress the data
+        decompressed_data = gzip.decompress(compressed_data)
+
+        # Write to ts.txt
+        with open(ts_file, "wb") as f:
+            f.write(decompressed_data)
+
+        print(f"Successfully downloaded and extracted ts.txt to {ts_file}")
+
+    except Exception as e:
+        print(f"Error downloading or extracting ts.txt: {e}")
+        raise
 
 
 def generate_test_files(target_dir: Path) -> None:
-    """Generate test data files in target directory"""
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    for filename, seed in SEEDS.items():
-        filepath = target_dir / filename
-
-        if filepath.exists():
-            continue
-
-        print(f"Generating {filename} with {SIZE_PER_FILE:,} integers...")
-
-        # Generate random data
-        data = generate_random_data(seed, SIZE_PER_FILE)
-
-        # Write to file
-        with open(filepath, "wb") as f:
-            f.write(data)
+    """Download test data file to target directory"""
+    download_ts_data(target_dir)

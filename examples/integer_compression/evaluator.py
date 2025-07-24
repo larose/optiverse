@@ -44,9 +44,8 @@ class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
         shutil.copy2(solution_dir / "main.go", temp_dir / "main.go")
         shutil.copy2(solution_dir / "go.mod", temp_dir / "go.mod")
 
-        # Copy test data files to temp directory
-        for filename in ["data_a.bin", "data_b.bin", "data_c.bin"]:
-            shutil.copy2(solution_dir / filename, temp_dir / filename)
+        # Copy test data file to temp directory
+        shutil.copy2(solution_dir / "ts.txt", temp_dir / "ts.txt")
 
     def _run_single_dataset_test(
         self,
@@ -141,9 +140,9 @@ class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
             metrics[f"{size_name}_compression_ratio"] = stats.avg_compression_ratio
             metrics[f"{size_name}_compression_time"] = stats.avg_compression_time
 
-            # For overall score calculation, we assume each dataset ran 10 times
-            # since that's what _run_dataset_tests does
-            overall_decompression_times.extend([stats.avg_decompression_time] * 10)
+            # For overall score calculation, we assume each dataset ran 3 times
+            # since that's what _run_single_dataset_test does
+            overall_decompression_times.extend([stats.avg_decompression_time] * 3)
 
         # Calculate overall score
         score = (
@@ -165,9 +164,7 @@ class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
 
         # Test execution phase
         test_configs = [
-            ("data_a.bin", "a"),
-            ("data_b.bin", "b"),
-            ("data_c.bin", "c"),
+            ("ts.txt", "ts"),
         ]
         dataset_results = self._run_dataset_tests(temp_dir, test_configs, artifacts)
 

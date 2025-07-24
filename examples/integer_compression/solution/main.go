@@ -1,26 +1,40 @@
 package main
 
 import (
-	"encoding/binary"
+	"bufio"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
 func loadTestData(filename string) ([]uint32, error) {
-	data, err := os.ReadFile(filename)
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	if len(data)%4 != 0 {
-		return nil, fmt.Errorf("invalid data file: size %d is not divisible by 4", len(data))
-	}
+	defer file.Close()
 
 	var result []uint32
-	for i := 0; i < len(data); i += 4 {
-		val := binary.LittleEndian.Uint32(data[i : i+4])
-		result = append(result, val)
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue // Skip empty lines
+		}
+
+		val, err := strconv.ParseUint(line, 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid integer on line: %s", line)
+		}
+
+		result = append(result, uint32(val))
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
 	}
 
 	return result, nil
