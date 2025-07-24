@@ -11,7 +11,6 @@ def download_ts_data(target_dir: Path) -> None:
 
     # Check if file already exists (cache)
     if ts_file.exists():
-        print(f"ts.txt already exists in {target_dir}, skipping download")
         return
 
     print("Downloading ts.txt.gz from zentures/encoding repository...")
