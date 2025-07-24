@@ -1,12 +1,12 @@
-Implement a compression algorithm for 32-bit unsigned integers in Go by completing the functions below. Your goal is to achieve the best decompression speed while maintaining good compression ratio.
+Implement a compression algorithm for sorted 32-bit unsigned integers in Go by completing the functions below. Your goal is to achieve the best decompression speed while maintaining good compression ratio.
 
 ## Requirements
 
 Define `Compress` and `Decompress` functions with the following signatures:
 
 ```go
-func Compress(data []uint32) ([]byte, error)
-func Decompress(compressed []byte) ([]uint32, error)
+func Compress(data []uint32) []byte
+func Decompress(compressed []byte) []uint32
 ```
 
 Define any helper functions at the package level (do not nest functions).
@@ -17,7 +17,7 @@ Built-in compression packages (compress/gzip, compress/flate, compress/zlib, com
 
 The decompressed data must exactly match the original input data.
 
-Handle errors appropriately and return them.
+You can assume that all input data is well-formatted and valid.
 
 ## Evaluation Criteria
 

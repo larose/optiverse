@@ -3,7 +3,7 @@ import struct
 from pathlib import Path
 
 
-SIZE_PER_FILE = 100_000_000
+SIZE_PER_FILE = 10_000_000
 SEEDS = {
     "data_a.bin": 12345,
     "data_b.bin": 67890,
@@ -12,17 +12,17 @@ SEEDS = {
 
 
 def generate_random_data(seed: int, size: int) -> bytes:
-    """Generate random uint32 data with given seed"""
+    """Generate sorted uint32 data with given seed"""
     rng = random.Random(seed)
-    data = bytearray()
 
-    for _ in range(size):
-        # Generate random uint32 value
-        value = rng.randint(0, 2**32 - 1)
-        # Pack as little-endian uint32
-        data.extend(struct.pack("<I", value))
+    # Generate random integers efficiently
+    values = [rng.randint(0, 2**32 - 1) for _ in range(size)]
 
-    return bytes(data)
+    # Sort to create sorted integer sequence
+    values.sort()
+
+    # Pack all values at once using batch packing for efficiency
+    return struct.pack(f"<{size}I", *values)
 
 
 def generate_test_files(target_dir: Path) -> None:

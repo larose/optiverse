@@ -47,21 +47,13 @@ func main() {
 
 	// Measure compression
 	start := time.Now()
-	compressed, err := Compress(data)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Compression error: %v\n", err)
-		os.Exit(1)
-	}
+	compressed := Compress(data)
 	compressionTime := time.Since(start)
 	compressedSize := len(compressed)
 
 	// Measure decompression
 	start = time.Now()
-	decompressed, err := Decompress(compressed)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Decompression error: %v\n", err)
-		os.Exit(1)
-	}
+	decompressed := Decompress(compressed)
 	decompressionTime := time.Since(start)
 
 	// Verify correctness
