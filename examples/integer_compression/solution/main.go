@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const numRuns = 3
+
 func loadTestData(filename string) ([]uint32, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -59,35 +61,62 @@ func main() {
 
 	originalSize := calculateOriginalSize(data)
 
-	// Measure compression
-	start := time.Now()
-	compressed := Compress(data)
-	compressionTime := time.Since(start)
-	compressedSize := len(compressed)
+	// Run multiple times and collect metrics
+	var decompressionTimes []int64
+	var compressionTimes []int64
+	var compressionRatios []float64
 
-	// Measure decompression
-	start = time.Now()
-	decompressed := Decompress(compressed)
-	decompressionTime := time.Since(start)
+	for run := 0; run < numRuns; run++ {
+		// Measure compression
+		start := time.Now()
+		compressed := Compress(data)
+		compressionTime := time.Since(start)
+		compressedSize := len(compressed)
 
-	// Verify correctness
-	if len(decompressed) != len(data) {
-		fmt.Fprintf(os.Stderr, "Length mismatch: got %d, expected %d\n",
-			len(decompressed), len(data))
-		os.Exit(1)
-	}
-	for j := range data {
-		if decompressed[j] != data[j] {
-			fmt.Fprintf(os.Stderr, "Data mismatch at index %d: got %d, expected %d\n",
-				j, decompressed[j], data[j])
+		// Measure decompression
+		start = time.Now()
+		decompressed := Decompress(compressed)
+		decompressionTime := time.Since(start)
+
+		// Verify correctness
+		if len(decompressed) != len(data) {
+			fmt.Fprintf(os.Stderr, "Length mismatch: got %d, expected %d\n",
+				len(decompressed), len(data))
 			os.Exit(1)
 		}
+		for j := range data {
+			if decompressed[j] != data[j] {
+				fmt.Fprintf(os.Stderr, "Data mismatch at index %d: got %d, expected %d\n",
+					j, decompressed[j], data[j])
+				os.Exit(1)
+			}
+		}
+
+		compressionRatio := float64(originalSize) / float64(compressedSize)
+
+		// Collect metrics
+		decompressionTimes = append(decompressionTimes, decompressionTime.Milliseconds())
+		compressionTimes = append(compressionTimes, compressionTime.Milliseconds())
+		compressionRatios = append(compressionRatios, compressionRatio)
 	}
 
-	compressionRatio := float64(originalSize) / float64(compressedSize)
+	// Calculate averages
+	var totalDecompressionTime int64
+	var totalCompressionTime int64
+	var totalCompressionRatio float64
 
-	// Output metrics with >>> prefix
-	fmt.Printf(">>> decompression_time: %d\n", decompressionTime.Milliseconds())
-	fmt.Printf(">>> compression_ratio: %.3f\n", compressionRatio)
-	fmt.Printf(">>> compression_time: %d\n", compressionTime.Milliseconds())
+	for i := 0; i < numRuns; i++ {
+		totalDecompressionTime += decompressionTimes[i]
+		totalCompressionTime += compressionTimes[i]
+		totalCompressionRatio += compressionRatios[i]
+	}
+
+	avgDecompressionTime := float64(totalDecompressionTime) / float64(numRuns)
+	avgCompressionTime := float64(totalCompressionTime) / float64(numRuns)
+	avgCompressionRatio := totalCompressionRatio / float64(numRuns)
+
+	// Output averaged metrics with >>> prefix
+	fmt.Printf(">>> decompression_time: %.0f\n", avgDecompressionTime)
+	fmt.Printf(">>> compression_ratio: %.3f\n", avgCompressionRatio)
+	fmt.Printf(">>> compression_time: %.0f\n", avgCompressionTime)
 }

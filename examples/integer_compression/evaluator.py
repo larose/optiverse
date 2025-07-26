@@ -20,9 +20,9 @@ class ProgramRunResult:
 
 @dataclass
 class DatasetStats:
-    avg_decompression_time: float
-    avg_compression_ratio: float
-    avg_compression_time: float
+    decompression_time: float
+    compression_ratio: float
+    compression_time: float
     dataset_name: str
 
 
@@ -44,8 +44,8 @@ class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
         shutil.copy2(solution_dir / "main.go", temp_dir / "main.go")
         shutil.copy2(solution_dir / "go.mod", temp_dir / "go.mod")
 
-        # Copy test data file to temp directory
-        shutil.copy2(solution_dir / "ts.txt", temp_dir / "ts.txt")
+        # Create symlink to test data file instead of copying
+        (temp_dir / "ts.txt").symlink_to(solution_dir / "ts.txt")
 
     def _run_single_dataset_test(
         self,
@@ -55,49 +55,31 @@ class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
         artifacts: Dict[str, str],
     ) -> Optional[DatasetStats]:
         """Run tests on a single dataset and return calculated stats"""
-        results: List[ProgramRunResult] = []
+        result = self._run_go_program(temp_dir, test_file)
 
-        for run in range(3):
-            result = self._run_go_program(temp_dir, test_file)
+        # Store artifacts
+        artifacts[f"{test_file}_stdout.txt"] = result.stdout
+        artifacts[f"{test_file}_stderr.txt"] = result.stderr
 
-            artifacts[f"{test_file}_{run+1}_stdout.txt"] = result.stdout
-            artifacts[f"{test_file}_{run+1}_stderr.txt"] = result.stderr
+        if result.decompression_time is None:
+            # Early exit - mark this dataset as failed
+            return None
 
-            if result.decompression_time is None:
-                # Early exit - mark this dataset as failed
-                return None
+        if result.compression_ratio is None:
+            raise ValueError("compression_ratio not found in program output")
+        if result.compression_time is None:
+            raise ValueError("compression_time not found in program output")
 
-            if result.compression_ratio is None:
-                raise ValueError("compression_ratio not found in program output")
-            if result.compression_time is None:
-                raise ValueError("compression_time not found in program output")
-
-            results.append(result)
-
-        # Calculate averages for this dataset
-        decompression_times = [
-            r.decompression_time for r in results if r.decompression_time is not None
-        ]
-        compression_ratios = [
-            r.compression_ratio for r in results if r.compression_ratio is not None
-        ]
-        compression_times = [
-            r.compression_time for r in results if r.compression_time is not None
-        ]
-
-        avg_decompression_time = sum(decompression_times) / len(decompression_times)
-        avg_compression_ratio = sum(compression_ratios) / len(compression_ratios)
-        avg_compression_time = sum(compression_times) / len(compression_times)
-
+        # Create DatasetStats directly from the averaged results returned by Go program
         dataset_stats = DatasetStats(
-            avg_decompression_time=avg_decompression_time,
-            avg_compression_ratio=avg_compression_ratio,
-            avg_compression_time=avg_compression_time,
+            decompression_time=result.decompression_time,
+            compression_ratio=result.compression_ratio,
+            compression_time=result.compression_time,
             dataset_name=size_name,
         )
 
         logger.info(
-            f"Results for {size_name}: decompression={avg_decompression_time:.0f}ms, ratio={avg_compression_ratio:.3f}"
+            f"Results for {size_name}: decompression={result.decompression_time:.0f}ms, ratio={result.compression_ratio:.3f}"
         )
 
         return dataset_stats
@@ -136,12 +118,12 @@ class IntegerCompressionEvaluator(optiverse.evaluator.Evaluator):
                 return metrics, None
 
             # Store metrics with size-specific names
-            metrics[f"{size_name}_decompression_time"] = stats.avg_decompression_time
-            metrics[f"{size_name}_compression_ratio"] = stats.avg_compression_ratio
-            metrics[f"{size_name}_compression_time"] = stats.avg_compression_time
+            metrics[f"{size_name}_decompression_time"] = stats.decompression_time
+            metrics[f"{size_name}_compression_ratio"] = stats.compression_ratio
+            metrics[f"{size_name}_compression_time"] = stats.compression_time
 
             # Add the average decompression time for this dataset
-            overall_decompression_times.append(stats.avg_decompression_time)
+            overall_decompression_times.append(stats.decompression_time)
 
         # Calculate overall score
         score = (
