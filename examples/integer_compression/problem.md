@@ -1,26 +1,24 @@
-Implement a compression algorithm for sorted 32-bit unsigned integers in Go by completing the functions below. Your goal is to achieve the best decompression speed while maintaining good compression ratio.
+Design and implement a compression algorithm for sorted 32-bit unsigned integers in Go by completing the two function stubs provided below. Your primary objective is to achieve maximum decompression speed (lower is better), while also maintaining a competitive compression ratio.
+
+To be competitive, you must go beyond standard techniques such as Variable Byte (VByte), PForDelta, or VTEnc. You may draw inspiration from these and related schemes, but true innovation is required. Simply re-implementing known algorithms will not suffice.
 
 ## Requirements
 
-Define `Compress` and `Decompress` functions with the following signatures:
+Implement the following two functions with these exact signatures:
 
 ```go
 func Compress(data []uint32) []byte
 func Decompress(compressed []byte) []uint32
 ```
 
-Define any helper functions at the package level (do not nest functions).
+You may define additional package-level helper functions (no nested functions).
 
-Use only the Go Standard Library; external packages are not allowed.
+Use only the Go Standard Library. Third-party packages are not allowed.
 
-Built-in compression packages (compress/gzip, compress/flate, compress/zlib, compress/lzw) are prohibited.
+The use of built-in compression libraries (compress/gzip, flate, zlib, lzw, etc.) is strictly prohibited.
 
-The decompressed data must exactly match the original input data.
+The output of `Decompress(Compress(data))` must exactly match the original `data`.
 
-You can assume that all input data is well-formatted and valid.
-
-## Evaluation Criteria
-
-Your score is the average decompression time in milliseconds. Lower is better.
-
-Secondary metrics include compression ratio and compression time.
+You may assume that both:
+  - The input to `Compress` (`data`) is valid and strictly increasing.
+  - The input to `Decompress` (`compressed`) is valid and was produced by `Compress`.

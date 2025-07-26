@@ -158,9 +158,9 @@ class IteratedLocalSearch(SearchStrategy):
 
         if perturbation_methods is None:
             perturbation_methods = {
+                BestSolutionPerturbation(): 0.1,
+                DiverseBestSolutionPerturbation(): 0.8,
                 InitialSolutionPerturbation(): 0.1,
-                BestSolutionPerturbation(): 0.6,
-                DiverseBestSolutionPerturbation(): 0.3,
             }
         else:
             perturbation_methods = perturbation_methods
