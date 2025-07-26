@@ -1,6 +1,15 @@
-Design and implement a compression algorithm for sorted 32-bit unsigned integers in Go by completing the two function stubs provided below. Your primary objective is to achieve maximum decompression speed (lower is better), while also maintaining a competitive compression ratio.
+Design and implement a compression algorithm for sorted 32-bit unsigned integers in Go by completing the two function stubs provided below.
 
-To be competitive, you must go beyond standard techniques such as Variable Byte (VByte), PForDelta, or VTEnc. You may draw inspiration from these and related schemes, but true innovation is required. Simply re-implementing known algorithms will not suffice.
+Your primary goal is to achieve the lowest possible decompression time while also maintaining a competitive compression ratio and reasonable compression time.
+
+To be competitive, your solution must surpass traditional methods like Variable Byte (VByte), PForDelta, and VTEnc. Drawing inspiration from these or related techniques is allowed, but mere reimplementation is insufficient. True innovation is required.
+
+You are encouraged to explore novel approaches based on well-known general patterns, including but not limited to:
+    - Delta Encoding and Delta-of-Delta
+    - Bit-Packing and Frame-of-Reference
+    - Headerless or Self-Describing Formats
+    - Table-Driven and SIMD-Accelerated Decoding
+    - Block-based or chunked compression with skippable blocks
 
 ## Requirements
 
@@ -19,6 +28,6 @@ The use of built-in compression libraries (compress/gzip, flate, zlib, lzw, etc.
 
 The output of `Decompress(Compress(data))` must exactly match the original `data`.
 
-You may assume that both:
-  - The input to `Compress` (`data`) is valid and strictly increasing.
-  - The input to `Decompress` (`compressed`) is valid and was produced by `Compress`.
+You may assume that:
+    - The input to `Compress` (`data`) is valid and strictly increasing.
+    - The input to `Decompress` (`compressed`) is valid and was produced by a correct call to `Compress`.
