@@ -86,7 +86,7 @@ class InitialSolutionPerturbation(PerturbationMethod):
     ) -> SearchResult:
         initial_solution = get_initial_solution(solutions)
         result_tags = tags.copy()
-        result_tags["move"] = "restart"
+        result_tags["move"] = "perturb_restart"
         return SearchResult(
             solutions=[SolutionWithTitle(solution=initial_solution, title="Parent")],
             tags=result_tags,
@@ -107,7 +107,7 @@ class BestSolutionPerturbation(PerturbationMethod):
             return InitialSolutionPerturbation().perturb(solutions, tags)
 
         result_tags = tags.copy()
-        result_tags["move"] = "exploit"
+        result_tags["move"] = "perturb_exploit"
         return SearchResult(
             solutions=selected_solutions,
             tags=result_tags,
@@ -130,7 +130,7 @@ class DiverseBestSolutionPerturbation(PerturbationMethod):
             return InitialSolutionPerturbation().perturb(solutions, tags)
 
         result_tags = tags.copy()
-        result_tags["move"] = "explore"
+        result_tags["move"] = "perturb_explore"
         return SearchResult(
             solutions=selected_solutions,
             tags=result_tags,
@@ -158,9 +158,9 @@ class IteratedLocalSearch(SearchStrategy):
 
         if perturbation_methods is None:
             perturbation_methods = {
+                BestSolutionPerturbation(): 0.1,
+                DiverseBestSolutionPerturbation(): 0.8,
                 InitialSolutionPerturbation(): 0.1,
-                BestSolutionPerturbation(): 0.6,
-                DiverseBestSolutionPerturbation(): 0.3,
             }
         else:
             perturbation_methods = perturbation_methods
@@ -178,7 +178,7 @@ class IteratedLocalSearch(SearchStrategy):
 
         if not solutions_in_current_group:
             return InitialSolutionPerturbation().perturb(
-                solutions, {"phase": "perturbation", "group": self._group}
+                solutions, {"group": self._group}
             )
 
         sorted_solutions = sorted(
@@ -188,7 +188,6 @@ class IteratedLocalSearch(SearchStrategy):
         return SearchResult(
             solutions=[SolutionWithTitle(solution=sorted_solutions[0], title="Parent")],
             tags={
-                "phase": "intensification",
                 "move": "local_search",
                 "group": self._group,
             },
@@ -207,9 +206,7 @@ class IteratedLocalSearch(SearchStrategy):
         selected_method = random.choices(methods, weights=weights)[0]
 
         # Get the perturbation result
-        result = selected_method.perturb(
-            solutions, {"phase": "perturbation", "group": self._group}
-        )
+        result = selected_method.perturb(solutions, {"group": self._group})
 
         return result
 

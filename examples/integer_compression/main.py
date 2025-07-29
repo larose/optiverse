@@ -1,7 +1,7 @@
 from datetime import datetime
 import logging
 from pathlib import Path
-from .evaluator import TSPEvaluator
+from evaluator import IntegerCompressionEvaluator
 import optiverse
 import os
 
@@ -23,17 +23,17 @@ def main():
     else:
         directory = Path(raw_directory)
 
-    evaluator = TSPEvaluator()
-
     problem = optiverse.config.Problem(
         description=open(Path(__file__).parent / "problem.md").read(),
-        initial_solution=open(Path(__file__).parent / "solution" / "solver.py").read(),
-        evaluator=evaluator,
+        initial_solution=open(
+            Path(__file__).parent / "solution" / "compressor.go"
+        ).read(),
+        evaluator=IntegerCompressionEvaluator(),
     )
 
     config = optiverse.config.OptimizerConfig(
         llm=optiverse.config.create_llm_config_from_env(),
-        max_iterations=100,
+        max_iterations=10_000,
         problem=problem,
         search_strategy=optiverse.search_strategies.IteratedLocalSearch(
             max_iterations_without_improvements=10
