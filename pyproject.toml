@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "optiverse"
-version = "0.0.1"
+version = "0.0.2"
 description = "Optimization framework using Large Language Models"
 authors = [{ name = "Mathieu Larose", email = "mathieu@mathieularose.com" }]
 license = "GPL-3.0"
