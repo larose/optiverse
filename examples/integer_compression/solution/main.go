@@ -94,6 +94,16 @@ func main() {
 
 		compressionRatio := float64(originalSize) / float64(compressedSize)
 
+		// Calculate speeds in GB/s for this run
+		compressionSpeedGBs := float64(originalSize) / compressionTime.Seconds() / 1e9
+		decompressionSpeedGBs := float64(originalSize) / decompressionTime.Seconds() / 1e9
+
+		// Output per-run metrics
+		fmt.Printf("Original size: %d\n", originalSize)
+		fmt.Printf("Compressed size: %d\n", compressedSize)
+		fmt.Printf("Compression speed: %.3f GB/s\n", compressionSpeedGBs)
+		fmt.Printf("Decompression speed: %.3f GB/s\n", decompressionSpeedGBs)
+
 		// Collect metrics
 		decompressionTimes = append(decompressionTimes, decompressionTime.Milliseconds())
 		compressionTimes = append(compressionTimes, compressionTime.Milliseconds())
