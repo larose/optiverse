@@ -7,7 +7,6 @@ from typing import Dict, Optional, Tuple, Any
 import logging
 
 import optiverse
-from .solution.data_loader import find_challenge_by_id, load_arc_data
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +14,6 @@ logger = logging.getLogger(__name__)
 class ARCEvaluator(optiverse.evaluator.Evaluator):
     def __init__(self, challenge_id: str):
         self.challenge_id = challenge_id
-
-        # Load ARC data to validate challenge exists
-        data_dir = Path(__file__).parent / "data"
-        arc_data = load_arc_data(data_dir)
-        self.task, self.solutions = find_challenge_by_id(arc_data, challenge_id)
 
     def _calculate_code_metrics(self, code: str) -> Dict[str, Any]:
         """Calculate simple metrics from the solution code"""
@@ -43,26 +37,29 @@ class ARCEvaluator(optiverse.evaluator.Evaluator):
         Returns:
             EvaluatorResult with artifacts and score
         """
-        # Write the solution file
-        (temp_dir / "solver.py").write_text(code)
+        # Create solution subdirectory to maintain proper directory structure
+        solution_temp_dir = temp_dir / "solution"
+        solution_temp_dir.mkdir()
 
-        # Copy necessary template files
+        # Write the solution file in solution subdirectory
+        (solution_temp_dir / "solver.py").write_text(code)
+
+        # Copy necessary template files to solution subdirectory
         solution_dir = Path(__file__).parent / "solution"
-        shutil.copy2(solution_dir / "data_loader.py", temp_dir / "data_loader.py")
-        shutil.copy2(solution_dir / "main.py", temp_dir / "main.py")
+        shutil.copy2(
+            solution_dir / "data_loader.py", solution_temp_dir / "data_loader.py"
+        )
+        shutil.copy2(solution_dir / "main.py", solution_temp_dir / "main.py")
 
-        # Copy data files
+        # Create symlink to data directory at temp root level
         data_dir = Path(__file__).parent / "data"
-        temp_data_dir = temp_dir / "data"
-        temp_data_dir.mkdir()
-        for data_file in data_dir.glob("*.json"):
-            shutil.copy2(data_file, temp_data_dir / data_file.name)
+        (temp_dir / "data").symlink_to(data_dir)
 
         # Calculate basic metrics from the code
         metrics = self._calculate_code_metrics(code)
 
-        # Run the evaluation
-        score, stdout, stderr = self._run(temp_dir)
+        # Run the evaluation from solution subdirectory
+        score, stdout, stderr = self._run(solution_temp_dir)
 
         artifacts = {
             "stdout.txt": stdout,
@@ -72,12 +69,6 @@ class ARCEvaluator(optiverse.evaluator.Evaluator):
         if score is not None:
             metrics["accuracy"] = score
             metrics["challenge_id"] = self.challenge_id
-            metrics["test_count"] = len(self.task.test)
-            if self.solutions:
-                metrics["has_solutions"] = True
-                metrics["solution_count"] = len(self.solutions)
-            else:
-                metrics["has_solutions"] = False
 
         return optiverse.evaluator.EvaluatorResult(
             artifacts=artifacts,
