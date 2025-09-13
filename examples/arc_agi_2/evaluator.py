@@ -3,11 +3,11 @@ import tempfile
 import subprocess
 import shutil
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union, Any
+from typing import Dict, Optional, Tuple, Any
 import logging
 
 import optiverse
-from solution.data_loader import find_challenge_by_id, load_arc_data
+from .solution.data_loader import find_challenge_by_id, load_arc_data
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,9 @@ class ARCEvaluator(optiverse.evaluator.Evaluator):
 
         return metrics
 
-    def _evaluate_in_temp_dir(self, code: str, temp_dir: Path) -> optiverse.evaluator.EvaluatorResult:
+    def _evaluate_in_temp_dir(
+        self, code: str, temp_dir: Path
+    ) -> optiverse.evaluator.EvaluatorResult:
         """
         Evaluate an ARC solution by running it in a temporary directory.
 
@@ -95,7 +97,7 @@ class ARCEvaluator(optiverse.evaluator.Evaluator):
             stderr=subprocess.PIPE,
             text=True,
             timeout=40,
-            env=env
+            env=env,
         )
 
     def _run(self, temp_dir: Path) -> Tuple[Optional[float], str, str]:
