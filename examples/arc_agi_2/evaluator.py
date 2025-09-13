@@ -11,9 +11,38 @@ import optiverse
 logger = logging.getLogger(__name__)
 
 
+def format_grid(grid):
+    """Format a grid as ASCII for better LLM readability"""
+    return '\n'.join(' '.join(str(cell) for cell in row) for row in grid)
+
+
 class ARCEvaluator(optiverse.evaluator.Evaluator):
     def __init__(self, challenge_id: str):
         self.challenge_id = challenge_id
+
+        # Load challenge data for prompt generation
+        from .solution.data_loader import find_challenge_by_id, load_arc_data
+        data_dir = Path(__file__).parent / "data"
+        arc_data = load_arc_data(data_dir)
+        self.task, self.solutions = find_challenge_by_id(arc_data, challenge_id)
+
+    def get_training_examples_prompt(self) -> str:
+        """Generate training examples section for the prompt"""
+        if not self.task.train:
+            return ""
+
+        prompt = f"\n\n## Training Examples for Challenge ID: {self.challenge_id}\n\n"
+
+        for i, pair in enumerate(self.task.train, 1):
+            prompt += f"Example {i}:\n"
+            prompt += "Input:\n"
+            prompt += format_grid(pair.input)
+            prompt += "\n\nOutput:\n"
+            prompt += format_grid(pair.output)
+            prompt += "\n\n"
+
+        prompt += "Your task: Implement the transform() function to apply this pattern to test cases."
+        return prompt
 
     def _calculate_code_metrics(self, code: str) -> Dict[str, Any]:
         """Calculate simple metrics from the solution code"""

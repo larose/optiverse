@@ -30,8 +30,13 @@ def main():
 
     evaluator = ARCEvaluator(challenge_id=challenge_id)
 
+    # Read base problem description and append training examples
+    base_description = open(Path(__file__).parent / "problem.md").read()
+    training_examples = evaluator.get_training_examples_prompt()
+    full_description = base_description + training_examples
+
     problem = optiverse.config.Problem(
-        description=open(Path(__file__).parent / "problem.md").read(),
+        description=full_description,
         initial_solution=open(Path(__file__).parent / "solution" / "solver.py").read(),
         evaluator=evaluator,
     )
