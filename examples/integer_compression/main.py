@@ -1,9 +1,11 @@
-from datetime import datetime
 import logging
-from pathlib import Path
-from evaluator import IntegerCompressionEvaluator
-import optiverse
 import os
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import optiverse
+from optiverse.generators.agent import AgentGenerator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,8 +15,10 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+EXAMPLE_DIRECTORY = Path(__file__).parent
 
-def main():
+
+def main() -> None:
     raw_directory = os.getenv("DIRECTORY")
 
     if raw_directory is None:
@@ -24,25 +28,27 @@ def main():
         directory = Path(raw_directory)
 
     problem = optiverse.config.Problem(
-        description=open(Path(__file__).parent / "problem.md").read(),
-        initial_solution=open(
-            Path(__file__).parent / "solution" / "compressor.go"
-        ).read(),
-        evaluator=IntegerCompressionEvaluator(),
+        description=(EXAMPLE_DIRECTORY / "problem.md").read_text(),
+        initial_codebase=EXAMPLE_DIRECTORY / "initial",
+        # sys.executable rather than a shebang: the evaluator imports optiverse,
+        # so it has to run under the interpreter optiverse is installed in.
+        evaluate_command=[sys.executable, str(EXAMPLE_DIRECTORY / "evaluate.py")],
+        # Scoring streams a 1.6 GB dataset through Compress/Decompress 3 times.
+        score_timeout_seconds=2400.0,
+        validate_timeout_seconds=300.0,
     )
 
     config = optiverse.config.OptimizerConfig(
-        llm=optiverse.config.create_llm_config_from_env(),
-        max_iterations=10_000,
+        directory=directory,
+        generator=AgentGenerator.from_env(),
+        max_iterations=1000,
         problem=problem,
         search_strategy=optiverse.search_strategies.IteratedLocalSearch(
             max_iterations_without_improvements=10
         ),
-        directory=directory,
     )
 
-    optimizer = optiverse.optimizer.Optimizer(config=config)
-    optimizer.run()
+    optiverse.optimizer.Optimizer(config=config).run()
 
 
 if __name__ == "__main__":

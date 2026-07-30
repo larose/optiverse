@@ -6,6 +6,12 @@ The Traveling Salesman Problem (TSP) can be described as follows: given a list o
 
 See [problem.md](problem.md) for the complete problem description and requirements.
 
+## Layout
+
+- [initial/](initial/) — the seed codebase: a `solver.py` that returns one random tour.
+- [harness/](harness/) — owned by the evaluator: `main.py` (loads the instance, calls `solve`, prints the tour length), `context.py` and the `a280.tsp` instance.
+- [evaluate.py](evaluate.py) — the evaluator command. `score` averages three 30-second runs; `validate` does one 3-second run plus the no-nested-functions check that [problem.md](problem.md) requires, which is enough to answer "does this run and produce a legal tour" without spending the full budget.
+
 ## Heuristic Discovered by Optiverse
 
 After approximately 300 iterations, using Qwen3-235B-A22B as the LLM, Optiverse produced a heuristic based on Iterated Local Search (ILS). It includes:

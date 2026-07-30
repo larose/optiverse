@@ -6,6 +6,20 @@ The goal is to implement a compression algorithm for sorted 32-bit unsigned inte
 
 See [problem.md](problem.md) for the complete problem description and requirements.
 
+## Layout
+
+- [initial/](initial/) — the seed codebase. The agent works on a copy of this and may add, rename or delete `.go` files; the evolvable unit is the whole package, not one file.
+- [harness/](harness/) — owned by the evaluator, never editable by a candidate.
+  - `score/main.go` benchmarks against `ts.txt` and prints `>>> decompression_time` and friends.
+  - `validate/main.go` checks `Decompress(Compress(data)) == data` across twelve synthetic cases, including block boundaries at 127/128/129 and values at `MaxUint32`. It needs no dataset and finishes in milliseconds, which is what makes it usable inside the agent's loop.
+- [evaluate.py](evaluate.py) — the evaluator command. Assembles a package from the candidate's `.go` files plus the harness, so `main.go` and `go.mod` in a candidate are ignored rather than able to alter the benchmark.
+
+Scoring needs the benchmark dataset (~1.6 GB, gitignored):
+
+```bash
+make run.integer_compression   # downloads ts.txt on first run
+```
+
 ## Solution Found by Optiverse
 
 After approximately 1000 iterations, using Qwen3-235B-A22B as the LLM, Optiverse generated a highly efficient block-based delta encoding combined with binary packing.

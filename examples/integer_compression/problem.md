@@ -22,6 +22,15 @@ func Decompress(compressed []byte) []uint32
 
 You may define additional package-level helper functions (no nested functions).
 
+You may organise the package across as many `.go` files as you like; add, rename
+or delete files freely. All of them must belong to `package main`.
+
+`main.go`, `go.mod` and `go.sum` belong to the benchmark harness and are supplied
+for you. Files you create with those names are ignored.
+
+Do not leave compiled binaries or other build artifacts in the package. Build in
+a temporary directory if you need to.
+
 Use only the Go Standard Library. Third-party packages are not allowed.
 
 The use of built-in compression libraries (compress/gzip, flate, zlib, lzw, etc.) is strictly prohibited.

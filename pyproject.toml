@@ -19,9 +19,14 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = ["openai==1.93.1"]
+# The core is the search loop, the store and two process contracts (the
+# evaluator command, the generator). None of that needs a third-party package.
+dependencies = []
 
 [project.optional-dependencies]
+# The mini-swe-agent generator. Optional because it pulls litellm, datasets and
+# textual, which nobody wanting only the loop should have to install.
+agent = ["mini-swe-agent==2.4.6"]
 dev = [
     "black==25.1.0",
     "build==1.2.2.post1",
@@ -34,14 +39,18 @@ Homepage = "https://github.com/larose/optiverse"
 Repository = "https://github.com/larose/optiverse"
 
 [tool.setuptools]
-packages = ["optiverse"]
+packages = ["optiverse", "optiverse.generators", "optiverse.search_strategies"]
 
 [tool.black]
 target-version = ['py310']
-include = '(examples|optiverse).*\.py$'
+include = '(examples|optiverse|tests).*\.py$'
 
 [tool.pyright]
-include = ["examples", "optiverse"]
+include = ["examples", "optiverse", "tests"]
+# Seed codebases and harnesses are assembled into one flat directory at
+# evaluation time, so `from context import Context` only resolves there. Tell
+# pyright where the siblings live rather than dropping them from the checks.
+extraPaths = ["examples/tsp/harness", "examples/tsp/initial"]
 pythonVersion = "3.10"
 typeCheckingMode = "strict"
 reportMissingImports = true

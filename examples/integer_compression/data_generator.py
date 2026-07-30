@@ -1,45 +1,45 @@
+#!/usr/bin/env python3
+"""Fetch the benchmark dataset used for scoring.
+
+Run once before scoring:
+
+    python examples/integer_compression/data_generator.py
+
+The file is ~1.6 GB and gitignored. Validation does not need it, so an agent's
+inner loop never touches it.
+"""
+
 import gzip
+import sys
 import urllib.request
 from pathlib import Path
 
+# Source: https://github.com/vteromero/integer-compression-benchmarks
+DATA_URL = (
+    "https://github.com/zentures/encoding/raw/"
+    "b90e310a0325f9b765b4be7220df3642ad93ad8d/benchmark/data/ts.txt.gz"
+)
 
-def download_ts_data(target_dir: Path) -> None:
-    """Download and extract ts.txt data file if it doesn't exist"""
-    target_dir.mkdir(parents=True, exist_ok=True)
+DEFAULT_TARGET = Path(__file__).parent / "harness" / "ts.txt"
 
-    ts_file = target_dir / "ts.txt"
 
-    # Check if file already exists (cache)
-    if ts_file.exists():
+def download_ts_data(target: Path = DEFAULT_TARGET) -> None:
+    if target.exists():
+        print(f"{target} already exists")
         return
 
-    print("Downloading ts.txt.gz from zentures/encoding repository...")
+    target.parent.mkdir(parents=True, exist_ok=True)
 
-    # Source: https://github.com/vteromero/integer-compression-benchmarks
-    # URL to the compressed data file
-    url = "https://github.com/zentures/encoding/raw/b90e310a0325f9b765b4be7220df3642ad93ad8d/benchmark/data/ts.txt.gz"
+    print(f"Downloading {DATA_URL}...")
+    with urllib.request.urlopen(DATA_URL) as response:
+        compressed_data = response.read()
 
-    try:
-        # Download the gzipped file
-        with urllib.request.urlopen(url) as response:
-            compressed_data = response.read()
+    print("Extracting...")
+    target.write_bytes(gzip.decompress(compressed_data))
 
-        print("Extracting ts.txt...")
-
-        # Decompress the data
-        decompressed_data = gzip.decompress(compressed_data)
-
-        # Write to ts.txt
-        with open(ts_file, "wb") as f:
-            f.write(decompressed_data)
-
-        print(f"Successfully downloaded and extracted ts.txt to {ts_file}")
-
-    except Exception as e:
-        print(f"Error downloading or extracting ts.txt: {e}")
-        raise
+    print(f"Wrote {target} ({target.stat().st_size} bytes)")
 
 
-def generate_test_files(target_dir: Path) -> None:
-    """Download test data file to target directory"""
-    download_ts_data(target_dir)
+if __name__ == "__main__":
+    download_ts_data()
+    sys.exit(0)

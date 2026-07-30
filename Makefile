@@ -17,7 +17,7 @@ clean:
 .PHONY: init
 init:
 	python3 -m venv $(VENV)
-	$(PIP) install -e .[dev]
+	$(PIP) install -e .[dev,agent]
 
 .PHONY: format
 format:
@@ -34,6 +34,13 @@ publish.test: build
 .PHONY: run.tsp
 run.tsp:
 	$(PYTHON) -m examples.tsp.main
+
+.PHONY: run.integer_compression
+run.integer_compression: examples/integer_compression/harness/ts.txt
+	$(PYTHON) examples/integer_compression/main.py
+
+examples/integer_compression/harness/ts.txt:
+	$(PYTHON) examples/integer_compression/data_generator.py
 
 .PHONY: test
 test: test.format test.types test.unit

@@ -1,11 +1,21 @@
+"""Prompt construction.
+
+The prompt describes *what to do*: the problem, what the parent solutions
+achieved, and the task. It deliberately does not inline source code — the parents
+are directories on disk, and the generator tells the agent where they are. That
+keeps a three-parent prompt from carrying three whole codebases, and lets the
+agent read only what it decides to read.
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List
-from .search_strategies import SearchResult
+
 from .config import Problem
+from .search_strategies import SearchResult
 
 
-@dataclass
+@dataclass(frozen=True)
 class PromptGeneratorContext:
     problem: Problem
     strategy_result: SearchResult
@@ -13,56 +23,45 @@ class PromptGeneratorContext:
 
 class PromptGenerator(ABC):
     @abstractmethod
-    def generate(self, context: PromptGeneratorContext) -> str:
-        pass
+    def generate(self, context: PromptGeneratorContext) -> str: ...
 
 
 class DefaultPromptGenerator(PromptGenerator):
-
     def generate(self, context: PromptGeneratorContext) -> str:
-        solutions_section_buffer: List[str] = []
+        sections: List[str] = [
+            "# Problem description",
+            "",
+            context.problem.description,
+            "",
+            "# Parent solutions",
+            "",
+        ]
+
+        if not context.strategy_result.solutions:
+            sections.append("None. Build a solution from the problem description.")
+            sections.append("")
 
         for solution_with_title in context.strategy_result.solutions:
-            title = solution_with_title.title
             solution = solution_with_title.solution
 
-            solutions_section_buffer.append(f"## {title}")
-            solutions_section_buffer.append("")
-            solutions_section_buffer.append(f"Score: {solution.score}")
-            solutions_section_buffer.append("")
+            sections.append(f"## {solution_with_title.title}")
+            sections.append("")
+            sections.append(f"Score: {solution.score}")
+            sections.append("")
 
             if solution.metrics:
-                solutions_section_buffer.append("Metrics:")
-
-                for metric_name, metric_value in solution.metrics.items():
-                    solutions_section_buffer.append(
-                        f"  - {metric_name}: {metric_value}"
-                    )
-
-                solutions_section_buffer.append("")
+                sections.append("Metrics:")
+                for name, value in solution.metrics.items():
+                    sections.append(f"  - {name}: {value}")
+                sections.append("")
 
             if solution.description is not None:
-                solutions_section_buffer.append(f"### Description")
-                solutions_section_buffer.append(solution.description)
-                solutions_section_buffer.append("")
+                sections.append("### Description")
+                sections.append(solution.description)
+                sections.append("")
 
-            solutions_section_buffer.append(f"### Code")
-            solutions_section_buffer.append(f"```\n{solution.code}\n```")
-            solutions_section_buffer.append("")
+        sections.append("# Task")
+        sections.append("")
+        sections.append(context.strategy_result.task)
 
-        solutions_section = "\n".join(solutions_section_buffer)
-
-        text = f"""# Problem description
-
-{context.problem.description}
-
-# Solutions
-
-{solutions_section}
-
-# Task
-
-{context.strategy_result.task}
-"""
-
-        return text
+        return "\n".join(sections) + "\n"
