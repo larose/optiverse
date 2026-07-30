@@ -8,7 +8,7 @@ parent, and edits it in place. Nothing is returned but metadata: the codebase
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,14 @@ class GenerationContext:
     log_path: Path
     prompt: str
     references: List[ReferenceCodebase]
+
+    validate: Callable[[], bool]
+    """Whether `codebase` is currently valid.
+
+    The authoritative answer, for a generator that ends a turn on validity. The
+    agent's own invocation cannot be trusted for that: it may name a different
+    directory, and its exit code says nothing about which one it checked."""
+
     validate_shell_command: str
     """Exactly what the agent should run to check its work."""
 

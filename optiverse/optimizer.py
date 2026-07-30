@@ -52,6 +52,7 @@ class Optimizer:
                 log_path=self._store.agent_log_path(solution_id),
                 prompt=prompt,
                 references=self._references(strategy_result),
+                validate=lambda: self._evaluator.validate(codebase),
                 validate_shell_command=self._evaluator.shell_command(
                     VALIDATE, codebase
                 ),

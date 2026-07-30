@@ -4,6 +4,7 @@ Each fake evaluator is a real script run in a real subprocess: the contract is a
 process contract, so testing it any other way would test something else.
 """
 
+import os
 import stat
 import sys
 import tempfile
@@ -181,6 +182,59 @@ class ShellCommandTest(EvaluatorContractTestCase):
         argv: List[str] = evaluator.argv("score", Path("/tmp/code"))
 
         self.assertEqual(argv, ["run", "--flag", "score", "/tmp/code"])
+
+
+class AbsolutePathTest(EvaluatorContractTestCase):
+    """The agent runs in its own codebase, so a path relative to ours is a path
+    to nothing. This is what made the first live run fail."""
+
+    def test_codebase_is_named_absolutely(self) -> None:
+        evaluator = EvaluatorCommand(["/usr/bin/evaluate"])
+
+        argv = evaluator.argv("validate", Path("tmp/run/id/code"))
+
+        self.assertEqual(argv[-1], os.path.abspath("tmp/run/id/code"))
+
+    def relative_script(self) -> str:
+        """A real script named relative to wherever the tests are being run."""
+        script = self.root / "evaluate"
+        script.write_text("#!/bin/sh\nexit 0\n")
+        script.chmod(0o755)
+        return os.path.relpath(script, Path.cwd())
+
+    def test_a_program_given_as_a_path_is_resolved(self) -> None:
+        evaluator = EvaluatorCommand([self.relative_script()])
+
+        self.assertEqual(
+            evaluator.argv("score", self.codebase)[0], str(self.root / "evaluate")
+        )
+
+    def test_the_script_after_an_interpreter_is_resolved(self) -> None:
+        """`[python, evaluate.py]` is the shape both examples use, so the path
+        that has to survive is the second argument, not the first."""
+        evaluator = EvaluatorCommand([sys.executable, self.relative_script()])
+
+        self.assertEqual(
+            evaluator.argv("score", self.codebase)[1], str(self.root / "evaluate")
+        )
+
+    def test_a_bare_program_stays_a_path_lookup(self) -> None:
+        """`evaluate` means "whatever PATH finds", not a file in the cwd."""
+        evaluator = EvaluatorCommand(["evaluate"])
+
+        self.assertEqual(evaluator.argv("score", self.codebase)[0], "evaluate")
+
+    def test_arguments_that_are_not_paths_are_left_alone(self) -> None:
+        evaluator = EvaluatorCommand(["evaluate", "--mode=a/b", "no/such/file"])
+
+        self.assertEqual(
+            evaluator.argv("score", self.codebase)[:3],
+            ["evaluate", "--mode=a/b", "no/such/file"],
+        )
+
+    def test_an_empty_command_is_rejected(self) -> None:
+        with self.assertRaises(EvaluatorError):
+            EvaluatorCommand([])
 
 
 if __name__ == "__main__":

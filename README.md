@@ -24,7 +24,7 @@ Optiverse helps developers and researchers automate code improvement by generati
 - **Agents, not one-shot answers**: candidates are produced by [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) working in a real directory, with a command it can run to check its own work.
 - **Modular architecture**: Swap or customize search strategies and generators to experiment with different approaches.
 - **Multi-language support**: An evaluator is a command, not a Python class, so it can be a shell script, a Go binary or a Makefile — and the code under test can be in any language.
-- **Flexible LLM integration**: model access goes through [LiteLLM](https://github.com/BerriAI/litellm), so any provider works, including local and OpenAI-compatible endpoints.
+- **Flexible LLM integration**: model access goes through [LiteLLM](https://github.com/BerriAI/litellm), which talks to ~150 providers in their own dialect — hosted, self-hosted or local — so switching models is one environment variable.
 - **A dependency-free core**: the search loop, the store and the two process contracts are pure standard library. Only the agent generator needs an extra.
 
 ### How an iteration works
@@ -34,7 +34,7 @@ Optiverse helps developers and researchers automate code improvement by generati
 3. An agent edits that directory. It can run `<evaluate> validate <dir>` as often as it likes; the moment that passes on changed code, its turn ends.
 4. Optiverse runs `<evaluate> score <dir>` and records the score, metrics and lineage.
 
-The agent is told whether its code is **valid**, never how it **scores**. Ranking candidates is the search loop's job — an agent that could see the score would abandon a novel approach as soon as it looked worse than the incumbent, which is the very move that escapes local optima.
+The agent is told whether its own code is **valid**, never how it **scores**. It sees the parent solutions' scores as context, but it has no way to measure its own work — and that is the point. Ranking candidates is the search loop's job; an agent that could score itself would abandon a novel approach as soon as it looked worse than the incumbent, which is the very move that escapes local optima.
 
 ## Use Cases
 
@@ -74,17 +74,17 @@ source venv/bin/activate
 
 This example uses Optiverse to solve the [Traveling Salesman Problem (TSP)](https://en.wikipedia.org/wiki/Travelling_salesman_problem). The code is in the [examples/tsp](examples/tsp) directory.
 
-Model selection goes through LiteLLM, so any provider works:
+Model selection goes through LiteLLM, which speaks each provider's own API — Anthropic, Bedrock and Vertex are as native as OpenAI, and local servers work too. Set one variable:
 
-- `LLM_MODEL`: a [LiteLLM model name](https://docs.litellm.ai/docs/providers), such as `gemini/gemini-2.0-flash`, `openai/gpt-4o` or `ollama/qwen3`
-- `LLM_API_KEY`: your API key, if the provider needs one
-- `LLM_API_BASE`: the endpoint, for any OpenAI-compatible or self-hosted server
+- `OPTIVERSE_MODEL`: a [LiteLLM model name](https://docs.litellm.ai/docs/providers), such as `gemini/gemini-3.6-flash`, `anthropic/claude-sonnet-5` or `ollama/qwen3`
 
-Example with Google Gemini:
+Credentials are your provider's own environment variables, set exactly as that provider's documentation says — `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `OLLAMA_API_BASE` for a local server. LiteLLM reads them directly; Optiverse never handles your key.
 
 ```bash
-LLM_API_KEY="your-gemini-api-key" LLM_MODEL="gemini/gemini-2.0-flash" make run.tsp
+GEMINI_API_KEY="your-gemini-api-key" OPTIVERSE_MODEL="gemini/gemini-3.6-flash" make run.tsp
 ```
+
+Each iteration is bounded by a step limit and a wall-clock limit, but **not** by cost. Spend is recorded per candidate as `m_agent_cost_usd` in `solutions.csv`; check the first few rows before leaving a long run unattended.
 
 ### Sample Output:
 

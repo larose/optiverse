@@ -7,7 +7,8 @@ worse than the incumbent — which is exactly the move the loop relies on to
 escape local optima.
 
 Requires the `agent` extra: `pip install optiverse[agent]`. mini-swe-agent is
-imported inside `generate` so that `import optiverse` stays dependency-free.
+imported inside the methods that use it, so `import optiverse` stays
+dependency-free.
 
 mini-swe-agent annotates several signatures with bare `dict`, which strict mode
 reports as partially unknown. That looseness is in the dependency, not here, so
@@ -19,7 +20,7 @@ it is suppressed for this file only.
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Set, cast
 
 from .. import codebase as codebase_helpers
 from ..generator import (
@@ -31,8 +32,13 @@ from ..generator import (
 
 logger = logging.getLogger(__name__)
 
+# Models already reported as unpriced, so the notice is given once per process.
+_UNPRICED_MODELS: Set[str] = set()
+
+MODEL_VARIABLE = "OPTIVERSE_MODEL"
+
 DEFAULT_STEP_LIMIT = 40
-DEFAULT_COST_LIMIT = 1.0
+DEFAULT_COST_LIMIT = 0.0
 DEFAULT_WALL_TIME_LIMIT_SECONDS = 900
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 180
 
@@ -121,7 +127,13 @@ nl -ba filename.py | sed -n '10,20p'
 
 @dataclass(frozen=True)
 class AgentLimits:
-    """Bounds on one generation. All are enforced by mini-swe-agent itself."""
+    """Bounds on one generation. All are enforced by mini-swe-agent itself.
+
+    `cost_limit` is off by default: mini-swe-agent reads 0 as "no limit". Spend is
+    still recorded per candidate as `m_agent_cost_usd`, so it is observable
+    without being throttled. The bounds that always hold are the step and
+    wall-time limits.
+    """
 
     step_limit: int = DEFAULT_STEP_LIMIT
     cost_limit: float = DEFAULT_COST_LIMIT
@@ -134,47 +146,50 @@ class AgentGenerator(Generator):
         self,
         *,
         model_name: str,
-        api_base: Optional[str] = None,
-        api_key: Optional[str] = None,
         limits: Optional[AgentLimits] = None,
     ) -> None:
         self._model_name = model_name
-        self._api_base = api_base
-        self._api_key = api_key
         self._limits = limits or AgentLimits()
 
     @classmethod
     def from_env(cls, *, limits: Optional[AgentLimits] = None) -> "AgentGenerator":
-        """Build from `LLM_MODEL`, and optionally `LLM_API_BASE` / `LLM_API_KEY`.
+        """Build from `OPTIVERSE_MODEL`, a litellm model name.
 
-        `LLM_MODEL` is a litellm model name such as `gemini/gemini-2.0-flash` or
-        `openai/gpt-4o`. Set `LLM_API_BASE` for any OpenAI-compatible endpoint.
+        Credentials are the provider's own environment variables, set the way that
+        provider's documentation says — `GEMINI_API_KEY` for `gemini/...`,
+        `ANTHROPIC_API_KEY` for `anthropic/...`, `OLLAMA_API_BASE` for a local
+        server. litellm reads them itself, so there is nothing to pass through.
         """
-        model_name = os.getenv("LLM_MODEL")
+        model_name = os.getenv(MODEL_VARIABLE)
         if not model_name:
-            raise ValueError("LLM_MODEL environment variable is required")
+            raise ValueError(f"{MODEL_VARIABLE} environment variable is required")
 
-        return cls(
-            model_name=model_name,
-            api_base=os.getenv("LLM_API_BASE"),
-            api_key=os.getenv("LLM_API_KEY"),
-            limits=limits,
+        return cls(model_name=model_name, limits=limits)
+
+    def build_model(self) -> Any:
+        """The model layer, matched to the templates the agent is given.
+
+        Text-based rather than tool-calling: both templates `generate` renders
+        describe the ```mswea_bash_command fence, which is what this class's
+        `action_regex` parses. The tool-calling class would reject those replies
+        as format errors, and would also rule out every model without tool
+        support.
+
+        `cost_tracking="ignore_errors"` because mini-swe-agent otherwise raises
+        when litellm cannot price a model — outside its own retry loop, losing the
+        whole iteration. A missing price is not a reason to discard a candidate.
+        """
+        # Imported here so the core stays importable without the agent extra.
+        from ._mini_swe_agent import RateLimitAwareModel
+
+        return RateLimitAwareModel(
+            model_name=self._model_name,
+            model_kwargs={"drop_params": True},
+            cost_tracking="ignore_errors",
         )
 
-    def _model_kwargs(self) -> Dict[str, Any]:
-        model_kwargs: Dict[str, Any] = {"drop_params": True}
-
-        if self._api_base:
-            model_kwargs["api_base"] = self._api_base
-        if self._api_key:
-            model_kwargs["api_key"] = self._api_key
-
-        return model_kwargs
-
     def generate(self, context: GenerationContext) -> GenerationResult:
-        # Imported here so the core stays importable without the agent extra.
         from minisweagent.agents.default import DefaultAgent
-        from minisweagent.models.litellm_model import LitellmModel
 
         from ._mini_swe_agent import (
             ValidateTerminatesEnvironment,
@@ -186,6 +201,7 @@ class AgentGenerator(Generator):
         environment = ValidateTerminatesEnvironment(
             baseline_digest=baseline_digest,
             codebase=context.codebase,
+            validate=context.validate,
             validate_command=context.validate_shell_command,
             cwd=str(context.codebase),
             timeout=self._limits.command_timeout_seconds,
@@ -194,9 +210,7 @@ class AgentGenerator(Generator):
         agent_config = default_agent_config()
 
         agent = DefaultAgent(
-            LitellmModel(
-                model_name=self._model_name, model_kwargs=self._model_kwargs()
-            ),
+            self.build_model(),
             environment,
             system_template=cast(str, agent_config["system_template"]),
             instance_template=INSTANCE_TEMPLATE,
@@ -214,6 +228,7 @@ class AgentGenerator(Generator):
         }
 
         exit_status = self._run(agent, context)
+        self._report_unpriced(agent)
 
         return GenerationResult(
             metrics={
@@ -222,6 +237,25 @@ class AgentGenerator(Generator):
                 "agent_validate_runs": environment.validate_runs,
             },
             tags={"exit_status": exit_status},
+        )
+
+    def _report_unpriced(self, agent: Any) -> None:
+        """Say so when a model turns out to be unpriced, rather than looking free.
+
+        Cost tracking is set to ignore errors, so an unknown model reports zero
+        instead of failing. Said once per process: repeating it every iteration
+        would bury the run's own output.
+        """
+        if agent.n_calls <= 0 or agent.cost > 0.0:
+            return
+
+        if self._model_name in _UNPRICED_MODELS:
+            return
+
+        _UNPRICED_MODELS.add(self._model_name)
+        logger.info(
+            f"litellm has no pricing for {self._model_name}, so agent_cost_usd "
+            "will read 0. Step and wall-time limits still bound each iteration."
         )
 
     def _run(self, agent: Any, context: GenerationContext) -> str:

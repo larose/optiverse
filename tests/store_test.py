@@ -57,6 +57,19 @@ class AllocateTest(StoreTestCase):
     def test_ids_are_distinct(self) -> None:
         self.assertNotEqual(self.store.allocate(), self.store.allocate())
 
+    def test_paths_are_absolute_even_from_a_relative_directory(self) -> None:
+        """They are handed to an agent running in its own working directory, so a
+        path relative to ours names nothing there."""
+        store = FileSystemStore(directory=Path("tmp") / "relative")
+        solution_id = "0" * 32
+
+        for path in (
+            store.codebase_path(solution_id),
+            store.description_path(solution_id),
+            store.agent_log_path(solution_id),
+        ):
+            self.assertTrue(path.is_absolute(), path)
+
     def test_description_and_log_paths_sit_outside_the_codebase(self) -> None:
         """Neither may end up inside code/, or it would become part of the solution."""
         solution_id = self.store.allocate()

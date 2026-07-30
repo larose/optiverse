@@ -20,6 +20,7 @@ mistaken for a bad candidate.
 
 import json
 import logging
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,12 +58,12 @@ class EvaluatorCommand:
         score_timeout_seconds: float = 600.0,
         validate_timeout_seconds: float = 120.0,
     ) -> None:
-        self._command = list(command)
+        self._command = _resolve_program(command)
         self._score_timeout_seconds = score_timeout_seconds
         self._validate_timeout_seconds = validate_timeout_seconds
 
     def argv(self, mode: str, codebase: Path) -> List[str]:
-        return [*self._command, mode, str(codebase)]
+        return [*self._command, mode, os.path.abspath(codebase)]
 
     def shell_command(self, mode: str, codebase: Path) -> str:
         """The command as a shell string, for the agent's instructions."""
@@ -108,6 +109,41 @@ class EvaluatorCommand:
             )
 
         return _parse_score(result.stdout, log=result.stderr)
+
+
+def _resolve_program(command: Sequence[str]) -> List[str]:
+    """Make a command that names files runnable from any directory.
+
+    The agent runs in its own codebase, so a relative `./evaluate` — or the
+    script in `[interpreter, script]`, which is the shape the examples use —
+    would find nothing from there.
+
+    An argument is rewritten only when it is a path that exists: a bare name is a
+    `PATH` lookup and must stay one, and a flag or an argument that merely
+    contains a slash is not ours to touch.
+
+    Made absolute rather than resolved, because symlinks carry meaning here: a
+    venv's `bin/python` points at the system interpreter, and following it would
+    run the evaluator without the venv's packages.
+    """
+    argv = list(command)
+
+    if not argv:
+        raise EvaluatorError("Evaluator command is empty")
+
+    separators = [os.sep] + ([os.altsep] if os.altsep else [])
+
+    for index, argument in enumerate(argv):
+        if argument.startswith("-"):
+            continue
+
+        if not any(separator in argument for separator in separators):
+            continue
+
+        if Path(argument).exists():
+            argv[index] = os.path.abspath(argument)
+
+    return argv
 
 
 def _parse_score(stdout: str, *, log: str) -> ScoreResult:

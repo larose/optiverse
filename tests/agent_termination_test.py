@@ -42,6 +42,11 @@ class ValidateTerminatesEnvironmentTest(unittest.TestCase):
         script.write_text(f'#!/bin/sh\n[ -f "{self.fail_marker}" ] && exit 1\nexit 0\n')
         script.chmod(0o755)
 
+        # Separate from the script's exit code, so a command that succeeds while
+        # the solution is invalid — the agent checked somewhere else — can be
+        # exercised.
+        self.invalid_marker = self.root / "INVALID"
+
         self.validate_command = f"{script} validate {self.codebase}"
 
     def tearDown(self) -> None:
@@ -49,11 +54,18 @@ class ValidateTerminatesEnvironmentTest(unittest.TestCase):
 
     def make_validation_fail(self) -> None:
         self.fail_marker.write_text("")
+        self.invalid_marker.write_text("")
+
+    def validate(self) -> bool:
+        """Stands in for the evaluator the optimizer would pass in, answering
+        about *our* codebase however the agent phrased its own command."""
+        return not self.invalid_marker.is_file()
 
     def environment(self) -> "ValidateTerminatesEnvironment":
         return ValidateTerminatesEnvironment(
             baseline_digest=self.baseline_digest,
             codebase=self.codebase,
+            validate=self.validate,
             validate_command=self.validate_command,
             cwd=str(self.codebase),
             timeout=30,
@@ -84,6 +96,28 @@ class ValidateTerminatesEnvironmentTest(unittest.TestCase):
             self.run_command(
                 f"cd {self.codebase} && {self.validate_command} && echo done"
             )
+
+    def test_rewritten_path_still_ends_the_turn(self) -> None:
+        """What actually happened on the first live run: the agent reworded the
+        path, the old exact-string match missed it, and the turn ran to the step
+        limit hill-climbing."""
+        self.change_the_tree()
+
+        with self.assertRaises(Submitted):
+            self.run_command(f"{self.root / 'evaluate'} validate .")
+
+    def test_validating_a_different_directory_does_not_end_the_turn(self) -> None:
+        """A passing exit code says nothing about which directory was checked."""
+        self.change_the_tree()
+        self.invalid_marker.write_text("")
+
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+
+        output = self.run_command(f"{self.root / 'evaluate'} validate {elsewhere}")
+
+        self.assertEqual(output["returncode"], 0)
+        self.assertIn("your own solution does not validate", output["output"])
 
     def test_validating_without_a_change_does_not_end_the_turn(self) -> None:
         """The starting solution already validates, so this would otherwise let
