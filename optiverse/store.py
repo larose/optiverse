@@ -80,9 +80,10 @@ class Store(ABC):
 
 class FileSystemStore(Store):
     def __init__(self, directory: Path) -> None:
-        # Absolute, because these paths are handed to an agent that runs with its
-        # own working directory, where a relative path names nothing. Not
-        # resolved: symlinks stay as the caller wrote them.
+        # Absolute, because these paths become an agent's working directory and
+        # the argument to an evaluator subprocess, neither of which can be
+        # trusted to run from here. The prompt is relative; this is not. Not
+        # resolved, either: symlinks stay as the caller wrote them.
         self._directory = Path(os.path.abspath(directory))
 
     def _solution_directory(self, solution_id: str) -> Path:

@@ -32,7 +32,10 @@ def main() -> None:
         initial_codebase=EXAMPLE_DIRECTORY / "initial",
         # sys.executable rather than a shebang: the evaluator imports optiverse,
         # so it has to run under the interpreter optiverse is installed in.
-        evaluate_command=[sys.executable, str(EXAMPLE_DIRECTORY / "evaluate.py")],
+        evaluate_command=[
+            sys.executable,
+            str(EXAMPLE_DIRECTORY / "harness" / "evaluate.py"),
+        ],
         score_timeout_seconds=300.0,
         validate_timeout_seconds=60.0,
     )

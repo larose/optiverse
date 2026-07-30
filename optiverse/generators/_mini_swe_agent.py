@@ -9,7 +9,6 @@ is suppressed for this file only.
 
 import logging
 import re
-import shlex
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, cast
@@ -23,19 +22,28 @@ from minisweagent.models.litellm_model import LitellmModel
 from minisweagent.models.litellm_textbased_model import LitellmTextbasedModel
 
 from .. import codebase as codebase_helpers
+from ..evaluator import EvaluatorError, ValidationResult
 
 logger = logging.getLogger(__name__)
 
 VALIDATED_EXIT_STATUS = "Validated"
+
+# The one word the agent types instead of a command. Never reaches a shell.
+VALIDATE_COMMAND = "validate"
 
 UNCHANGED_NOTICE = (
     "\n[optiverse] This solution is valid, but it is byte-for-byte identical to "
     "the one you started from. Make a real change before checking again."
 )
 
-ELSEWHERE_NOTICE = (
-    "\n[optiverse] That check passed, but your own solution does not validate. "
-    "Check yours with exactly:\n{command}"
+ARGUMENTS_NOTICE = (
+    f"[optiverse] `{VALIDATE_COMMAND}` is a tool, not a program. Write it on its "
+    "own, with no arguments, no path and no redirection."
+)
+
+EVALUATOR_FAILED_NOTICE = (
+    "[optiverse] The evaluator could not be run, which is a problem with the "
+    "setup rather than with your solution: {error}"
 )
 
 # How long a provider may ask us to wait before we treat it as an exhausted quota
@@ -169,21 +177,20 @@ class RateLimitAwareModel(LitellmTextbasedModel):
 
 
 class ValidateTerminatesEnvironment(LocalEnvironment):
-    """Ends the agent's turn as soon as its solution validates.
+    """Adds a `validate` tool, and ends the agent's turn once it passes.
+
+    `validate` is a word this class intercepts, not a program: it never reaches a
+    shell. So the evaluator's path is never in the prompt and `score` is not one
+    word away from `validate`, and recognising the check is string equality
+    rather than a guess about what a command line meant.
 
     Once the code is correct, further work belongs to the outer loop: continuing
     would let the agent hill-climb, which costs tokens and quietly undoes
     diversification.
 
-    Termination requires the tree to have *changed* as well as validated. The
-    starting solution is already valid by construction, so without that guard an
-    agent could finish by running the check before doing any work.
-
-    Whether a command was the check is decided loosely — the evaluator program
-    and the `validate` mode, in any phrasing — but whether the solution is valid
-    is decided by running the check ourselves. An agent that rewrites the path,
-    adds a redirection or validates some other directory then neither escapes
-    termination nor triggers it wrongly.
+    Termination requires the tree to have *changed* as well as validated. A
+    parent the agent copied in is already valid, so without that guard it could
+    finish by validating someone else's work.
 
     This sits on top of mini-swe-agent's own submission protocol rather than
     replacing it: an agent that gives up can still exit via
@@ -196,39 +203,45 @@ class ValidateTerminatesEnvironment(LocalEnvironment):
         *,
         baseline_digest: str,
         codebase: Path,
-        validate: Callable[[], bool],
-        validate_command: str,
+        validate: Callable[[], ValidationResult],
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._baseline_digest = baseline_digest
         self._codebase = codebase
         self._validate = validate
-        self._validate_command = validate_command
-        self._program = _program_name(validate_command)
         self.validate_runs = 0
 
     def execute(
         self, action: Dict[str, Any], cwd: str = "", *, timeout: int | None = None
     ) -> Dict[str, Any]:
-        output: Dict[str, Any] = super().execute(action, cwd, timeout=timeout)
+        command = str(action.get("command", "")).strip()
 
-        command = str(action.get("command", ""))
-        if not self._is_validate(command):
-            return output
+        if command == VALIDATE_COMMAND:
+            return self._run_validate()
 
+        if _names_validate(command):
+            # `validate .`, `./validate`, `validate | tail`. Saying so costs one
+            # line; letting bash answer `command not found` costs a whole step.
+            return _result(ARGUMENTS_NOTICE, returncode=1)
+
+        return super().execute(action, cwd, timeout=timeout)
+
+    def _run_validate(self) -> Dict[str, Any]:
         self.validate_runs += 1
 
-        if output.get("returncode") != 0:
-            return output
+        try:
+            result = self._validate()
+        except EvaluatorError as error:
+            # Not the candidate's fault, so it is reported rather than counted
+            # as invalid, and the agent gets to keep working.
+            return _result(EVALUATOR_FAILED_NOTICE.format(error=error), returncode=1)
+
+        if not result.valid:
+            return _result(result.log, returncode=1)
 
         if codebase_helpers.digest(self._codebase) == self._baseline_digest:
-            return _with_notice(output, UNCHANGED_NOTICE)
-
-        if not self._validate():
-            return _with_notice(
-                output, ELSEWHERE_NOTICE.format(command=self._validate_command)
-            )
+            return _result(result.log + UNCHANGED_NOTICE, returncode=0)
 
         raise Submitted(
             {
@@ -238,34 +251,13 @@ class ValidateTerminatesEnvironment(LocalEnvironment):
             }
         )
 
-    def _is_validate(self, command: str) -> bool:
-        """Whether this command was an attempt to run the check.
 
-        Deliberately not an equality test on the string we handed over: agents
-        rewrite paths and add redirections, and a missed match costs the whole
-        step budget.
-        """
-        return self._program in command and "validate" in command
+def _names_validate(command: str) -> bool:
+    """Whether the agent was reaching for the tool but wrote something else."""
+    first_word = command.split(maxsplit=1)[0] if command.split() else ""
+    return first_word.lstrip("./") == VALIDATE_COMMAND
 
 
-def _program_name(validate_command: str) -> str:
-    """The evaluator's file name, which survives any rewriting of its path.
-
-    The command is `<program...> validate <codebase>`, so dropping the last two
-    tokens leaves the invocation. Its last non-flag word is the evaluator itself:
-    `evaluate.py` rather than the interpreter that happens to run it, which would
-    match every other Python command the agent runs.
-    """
-    tokens = shlex.split(validate_command)
-    program_tokens = tokens[:-2] or tokens[:1]
-
-    for token in reversed(program_tokens):
-        if not token.startswith("-"):
-            return Path(token).name
-
-    return Path(program_tokens[0]).name
-
-
-def _with_notice(output: Dict[str, Any], notice: str) -> Dict[str, Any]:
-    output["output"] = str(output.get("output", "")) + notice
-    return output
+def _result(output: str, *, returncode: int) -> Dict[str, Any]:
+    """An observation shaped the way `LocalEnvironment.execute` shapes one."""
+    return {"output": output.strip(), "returncode": returncode, "exception_info": ""}

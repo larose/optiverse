@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Union
 
+from .evaluator import ValidationResult
+
 
 @dataclass(frozen=True)
 class GenerationContext:
@@ -24,15 +26,13 @@ class GenerationContext:
     and a `metadata.txt`. They are the generator's own copies, so it may do as it
     likes with them. Empty when the search had no parents to offer."""
 
-    validate: Callable[[], bool]
-    """Whether `codebase` is currently valid.
+    validate: Callable[[], ValidationResult]
+    """Whether `codebase` is currently valid, and what the evaluator said.
 
-    The authoritative answer, for a generator that ends a turn on validity. The
-    agent's own invocation cannot be trusted for that: it may name a different
-    directory, and its exit code says nothing about which one it checked."""
-
-    validate_shell_command: str
-    """Exactly what the agent should run to check its work."""
+    The only way a generator gets to run the evaluator. A generator driving an
+    agent is expected to expose this as a tool rather than as a command the agent
+    types: the evaluator's path is then never disclosed, so `score` is not one
+    word away from `validate`."""
 
 
 @dataclass(frozen=True)

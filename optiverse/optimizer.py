@@ -1,12 +1,13 @@
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, cast
 
 from . import codebase as codebase_helpers
 from .config import OptimizerConfig
-from .evaluator import SCORE, VALIDATE, EvaluatorError, ScoreResult
+from .evaluator import SCORE, EvaluatorError, ScoreResult
 from .generator import GenerationContext, GenerationResult
 from .prompt_generator import DefaultPromptGenerator, PromptGeneratorContext
 from .search_strategies import SearchContext, SearchResult
@@ -33,29 +34,29 @@ class Optimizer:
             context=SearchContext(iteration=iteration, store=self._store)
         )
 
-        prompt = self._prompt_generator.generate(
-            PromptGeneratorContext(
-                problem=self._config.problem, strategy_result=strategy_result
-            )
-        )
-
         # Allocate first, so the agent works directly in the solution's final
         # home. There is no scratch directory and nothing to copy back.
         solution_id = self._store.allocate()
         codebase = self._store.codebase_path(solution_id)
+
+        # Before the prompt, which names the copies.
+        references_directory = self._copy_references(strategy_result, solution_id)
+
+        prompt = self._prompt_generator.generate(
+            PromptGeneratorContext(
+                problem=self._config.problem,
+                strategy_result=strategy_result,
+                references_directory=os.path.relpath(references_directory, codebase),
+            )
+        )
 
         generation_result = self._generator.generate(
             GenerationContext(
                 codebase=codebase,
                 log_path=self._store.agent_log_path(solution_id),
                 prompt=prompt,
-                references_directory=self._copy_references(
-                    strategy_result, solution_id
-                ),
+                references_directory=references_directory,
                 validate=lambda: self._evaluator.validate(codebase),
-                validate_shell_command=self._evaluator.shell_command(
-                    VALIDATE, codebase
-                ),
             )
         )
 

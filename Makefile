@@ -33,7 +33,7 @@ publish.test: build
 
 .PHONY: run.tsp
 run.tsp:
-	$(PYTHON) -m examples.tsp.main
+	$(PYTHON) -m examples.tsp.optimize
 
 .PHONY: run.integer_compression
 run.integer_compression: examples/integer_compression/harness/ts.txt

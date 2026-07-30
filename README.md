@@ -145,7 +145,7 @@ There is deliberately no stored evaluator log. It is reproducible from the files
 that are kept, and re-running gives fuller output than a stale copy:
 
 ```bash
-python examples/tsp/evaluate.py score tmp/<run>/<id>/code
+python examples/tsp/harness/evaluate.py score tmp/<run>/<id>/code
 ```
 
 A directory with no `metadata.json` is an iteration that died partway through. It

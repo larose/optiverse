@@ -33,6 +33,19 @@ SCORE = "score"
 
 
 @dataclass(frozen=True)
+class ValidationResult:
+    """The outcome of a `validate` run.
+
+    `log` carries both streams. The agent never runs the evaluator itself — it
+    calls a tool that runs it here — so this is the only way the diagnostics
+    reach it, and a compiler error it cannot read is an iteration wasted.
+    """
+
+    valid: bool
+    log: str
+
+
+@dataclass(frozen=True)
 class ScoreResult:
     """The outcome of a `score` run.
 
@@ -89,15 +102,23 @@ class EvaluatorCommand:
         except OSError as error:
             raise EvaluatorError(f"Could not run evaluator: {argv}") from error
 
-    def validate(self, codebase: Path) -> bool:
-        """Whether the candidate is valid.
+    def validate(self, codebase: Path) -> ValidationResult:
+        """Whether the candidate is valid, and what the evaluator said about it.
 
         A non-zero exit means invalid. It cannot be distinguished from "the
         evaluator broke", which is acceptable here: validate only gates the
         agent's turn, and `score` remains authoritative.
+
+        Both streams are joined, in the order a terminal would have shown them.
+        An evaluator is free to diagnose on either, and the agent reading this
+        has no way to ask for the other one.
         """
         result = self._run(VALIDATE, codebase, self._validate_timeout_seconds)
-        return result.returncode == 0
+
+        return ValidationResult(
+            valid=result.returncode == 0,
+            log=(result.stdout + result.stderr).strip(),
+        )
 
     def score(self, codebase: Path) -> ScoreResult:
         result = self._run(SCORE, codebase, self._score_timeout_seconds)

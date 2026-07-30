@@ -90,10 +90,8 @@ class InitialSolutionPerturbation(PerturbationMethod):
         return SearchResult(
             solutions=[SolutionWithTitle(solution=initial_solution, title="Parent")],
             tags=result_tags,
-            task="""Generate a fresh starting solution for this problem, independent of prior solutions.
-
-Construct the solution from scratch based on the problem requirements, constraints, and any relevant domain knowledge.
-""",
+            task="Start over. Build a new solution from the problem description "
+            "alone, ignoring the parent.",
         )
 
 
@@ -111,12 +109,8 @@ class BestSolutionPerturbation(PerturbationMethod):
         return SearchResult(
             solutions=selected_solutions,
             tags=result_tags,
-            task="""Develop an improved solution by analysing the provided parent solutions to identify their most effective features, methods, or structures.
-
-Where beneficial, combine complementary elements from multiple parents to create a cohesive hybrid solution that leverages their collective strengths.
-
-Ensure that the resulting solution is logically consistent, feasible, and represents a meaningful improvement or integration beyond any individual parent.
-""",
+            task="Combine the best parts of the parent solutions into one that "
+            "beats all of them.",
         )
 
 
@@ -134,14 +128,8 @@ class DiverseBestSolutionPerturbation(PerturbationMethod):
         return SearchResult(
             solutions=selected_solutions,
             tags=result_tags,
-            task="""Identify and implement a novel solution strategy distinct from the approaches represented in the provided parent solutions.
-
-First, review known algorithms, heuristics or data structures relevant to this problem type or related optimization problems.
-
-Then, select or adapt an approach that diversifies the solution set by introducing new perspectives or mechanisms not yet explored in the current search.
-
-If appropriate, draw inspiration from other domains or interdisciplinary methodologies to maximize solution diversity and conceptual coverage.
-""",
+            task="Take a different approach from the ones the parent solutions "
+            "use. A known algorithm they have not tried is a good place to look.",
         )
 
 
@@ -191,7 +179,7 @@ class IteratedLocalSearch(SearchStrategy):
                 "move": "local_search",
                 "group": self._group,
             },
-            task="Apply focused local improvements to enhance the current solution quality",
+            task="Make a focused improvement to the parent solution.",
         )
 
     def _perturb(self, solutions: List[Solution]) -> SearchResult:

@@ -60,7 +60,7 @@ class CopyingGenerator(Generator):
         value = float(solver.read_text().split("=")[1])
         solver.write_text(f"value = {value - 1}\n")
 
-        if not context.validate():
+        if not context.validate().valid:
             raise AssertionError("the copied-and-edited solution should validate")
 
         return GenerationResult(
@@ -263,11 +263,43 @@ class PromptTest(RunTestCase):
             self.assertNotIn("Score", prompt)
             self.assertNotIn(str(INITIAL_VALUE), prompt)
 
-    def test_the_prompt_carries_the_problem_and_the_task(self) -> None:
+    def test_the_prompt_holds_no_absolute_path(self) -> None:
+        """The agent starts in its codebase, so `.` and `../references` do."""
+        run_directory = str(completed_run().directory)
+
+        for prompt in completed_run().generator.prompts:
+            self.assertNotIn(run_directory, prompt)
+            self.assertIn("../references/", prompt)
+
+    def test_the_sections_read_in_order(self) -> None:
         prompt = completed_run().generator.prompts[0]
 
-        self.assertIn("Make the number smaller.", prompt)
-        self.assertIn("# Task", prompt)
+        headings = [line for line in prompt.splitlines() if line.startswith("# ")]
+
+        self.assertEqual(
+            headings,
+            [
+                "# What you are doing",
+                "# The problem",
+                "# Your working directory",
+                "# The parent solutions",
+                "# Your task",
+            ],
+        )
+
+    def test_the_prompt_carries_the_problem_and_the_task(self) -> None:
+        """The task is the strategy's move, and it changes between iterations.
+
+        Nothing is in group 0 when the first iteration starts, so it is told to
+        build from scratch; by the second there is something to improve on.
+        """
+        first, second = completed_run().generator.prompts
+
+        for prompt in (first, second):
+            self.assertIn("Make the number smaller.", prompt)
+
+        self.assertIn("Start over.", first)
+        self.assertIn("Make a focused improvement", second)
 
 
 if __name__ == "__main__":

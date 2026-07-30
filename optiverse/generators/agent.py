@@ -1,10 +1,11 @@
 """Generation by a coding agent, over mini-swe-agent.
 
-The agent is given a codebase directory and a way to check its own work. It is
-never given the score: ranking candidates is the search loop's job, and an agent
-that could see the score would abandon a novel approach the moment it looked
-worse than the incumbent — which is exactly the move the loop relies on to
-escape local optima.
+The agent is given a codebase directory and one tool, `validate`. It is never
+given the score: ranking candidates is the search loop's job, and an agent that
+could see the score would abandon a novel approach the moment it looked worse
+than the incumbent — which is exactly the move the loop relies on to escape local
+optima. Making the check a tool rather than a command is part of that: the
+evaluator's path never appears, so `score` is not one word away from `validate`.
 
 Requires the `agent` extra: `pip install optiverse[agent]`. mini-swe-agent is
 imported inside the methods that use it, so `import optiverse` stays
@@ -20,7 +21,6 @@ it is suppressed for this file only.
 import logging
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, Optional, Set, cast
 
 from .. import codebase as codebase_helpers
@@ -42,45 +42,38 @@ VALIDATED_EXIT_STATUS = "Validated"
 
 INSTANCE_TEMPLATE = """{{task}}
 
-# Your working directory
-
-You are working in `{{optiverse_codebase}}`. It is **empty**. Whatever you leave
-there is your solution, and nothing outside it is.
-
-{{optiverse_references}}
-
 # Checking your work
 
-Run this to check that your solution is valid:
+Run `validate` to check your solution:
 
-```
-{{optiverse_validate_command}}
+```mswea_bash_command
+validate
 ```
 
-It exits 0 when the solution builds and behaves correctly, and prints
-diagnostics otherwise. **When it exits 0 after you have made a change, your task
-ends immediately** — you do not need to submit anything.
+It is a tool, not a program: write it on its own, with no arguments and no path.
+It answers valid or invalid and prints diagnostics. **When it reports valid after
+you have changed something, your task ends immediately** — you do not need to
+submit anything.
 
 It reports validity only. It says nothing about how good the solution is; that is
-judged after you finish. Do not try to measure or optimise runtime.
+judged after you finish. It is also the only way to run anything belonging to
+this problem — there is no way to time or measure your own solution.
 
 # Rules
 
-- Leave no build artifacts, binaries or caches in the working directory. Build in
-  a temporary directory if you need to.
-- The parent copies are yours. Read them, edit them, delete them — none of it
-  reaches the stored solutions they were copied from.
-- Do not edit anything outside your working directory and those copies.
+- Leave no build artifacts, binaries or caches in your working directory. Build
+  in a temporary directory if you need to.
+- Do not edit anything outside your working directory and the parent copies.
 
-## Response format
+# Response format
 
 You can execute bash commands. Every response must contain exactly one action.
 
 1. Every response must contain exactly one action
 2. The action must be enclosed in triple backticks
 3. Directory or environment variable changes are not persistent. Every action is
-   executed in a new subshell. However, you can prefix any action with
-   `MY_ENV_VAR=MY_VALUE cd /path/to/working/dir && ...`
+   executed in a new subshell, starting in your working directory. However, you
+   can prefix any action with `MY_ENV_VAR=MY_VALUE cd /path/to/dir && ...`
 4. If you get stuck and cannot produce a valid solution, issue
    `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` on its own to give up.
 
@@ -193,7 +186,6 @@ class AgentGenerator(Generator):
             baseline_digest=baseline_digest,
             codebase=context.codebase,
             validate=context.validate,
-            validate_command=context.validate_shell_command,
             cwd=str(context.codebase),
             timeout=self._limits.command_timeout_seconds,
         )
@@ -210,12 +202,6 @@ class AgentGenerator(Generator):
             wall_time_limit_seconds=self._limits.wall_time_limit_seconds,
             output_path=context.log_path,
         )
-
-        agent.extra_template_vars |= {
-            "optiverse_codebase": str(context.codebase),
-            "optiverse_references": _render_references(context.references_directory),
-            "optiverse_validate_command": context.validate_shell_command,
-        }
 
         exit_status = self._run(agent, context)
         self._report_unpriced(agent)
@@ -263,40 +249,3 @@ class AgentGenerator(Generator):
             return f"Error:{type(error).__name__}"
 
         return str(outcome.get("exit_status", "Unknown"))
-
-
-def _render_references(directory: Path) -> str:
-    """Point at the parent copies rather than pasting them into the prompt.
-
-    Listed from disk rather than from a parallel list handed in, so the section
-    cannot claim a parent that is not there.
-    """
-    if not directory.is_dir():
-        return ""
-
-    identifiers = sorted(path.name for path in directory.iterdir() if path.is_dir())
-
-    if not identifiers:
-        return ""
-
-    lines = [
-        "# The parent solutions",
-        "",
-        f"Each one named in the task above has a copy in `{directory}`:",
-        "",
-    ]
-
-    for identifier in identifiers:
-        lines.append(f"- `{identifier}/`")
-
-    lines += [
-        "",
-        "Each holds `code/`, the solution itself, and `metadata.txt`, its score",
-        "and metrics. To start from one of them:",
-        "",
-        "```",
-        f"cp -r {directory}/<id>/code/. .",
-        "```",
-    ]
-
-    return "\n".join(lines) + "\n"
