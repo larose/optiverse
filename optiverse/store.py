@@ -2,12 +2,16 @@
 
 A solution is a directory:
 
-    <run>/<id>/code/          the codebase; read-only once committed
+    <run>/<id>/code/          the codebase
+    <run>/<id>/references/    copies of the parents this solution was built from
     <run>/<id>/agent.log      the agent's trajectory
     <run>/<id>/metadata.json  score, metrics, tags
 
 Ids are allocated *before* generation so the agent can work directly in
 `<id>/code/` rather than in a scratch directory that then has to be copied in.
+
+Nothing here is made read-only. A parent is never handed to an agent in place —
+it gets its own copy under `references/` — so there is nothing to protect.
 
 `metadata.json` is written atomically and last, which makes its presence the
 marker for a complete solution: a directory left behind by a crashed iteration
@@ -23,9 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Union, cast
 
-from . import codebase as codebase_helpers
-
 CODE_DIRECTORY_NAME = "code"
+REFERENCES_DIRECTORY_NAME = "references"
 AGENT_LOG_NAME = "agent.log"
 METADATA_NAME = "metadata.json"
 
@@ -47,6 +50,14 @@ class Store(ABC):
 
     @abstractmethod
     def codebase_path(self, solution_id: str) -> Path: ...
+
+    @abstractmethod
+    def references_path(self, solution_id: str) -> Path:
+        """Where the parents are copied for the agent to read.
+
+        Outside `code/`, so a parent never becomes part of the solution built
+        from it and is not inherited by children.
+        """
 
     @abstractmethod
     def agent_log_path(self, solution_id: str) -> Path: ...
@@ -85,6 +96,9 @@ class FileSystemStore(Store):
     def codebase_path(self, solution_id: str) -> Path:
         return self._solution_directory(solution_id) / CODE_DIRECTORY_NAME
 
+    def references_path(self, solution_id: str) -> Path:
+        return self._solution_directory(solution_id) / REFERENCES_DIRECTORY_NAME
+
     def agent_log_path(self, solution_id: str) -> Path:
         return self._solution_directory(solution_id) / AGENT_LOG_NAME
 
@@ -101,8 +115,6 @@ class FileSystemStore(Store):
 
         if not solution_directory.is_dir():
             raise ValueError(f"Solution {solution_id} was never allocated")
-
-        codebase_helpers.make_read_only(self.codebase_path(solution_id))
 
         metadata = {
             "id": solution_id,

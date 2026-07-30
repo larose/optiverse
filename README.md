@@ -30,11 +30,13 @@ Optiverse helps developers and researchers automate code improvement by generati
 ### How an iteration works
 
 1. The search strategy picks parent solutions and decides whether to exploit or diversify.
-2. The best parent's directory is copied into a fresh solution directory.
-3. An agent edits that directory. It can run `<evaluate> validate <dir>` as often as it likes; the moment that passes on changed code, its turn ends.
+2. Each parent is copied into `references/` inside a fresh solution directory, with its score and metrics alongside it.
+3. An agent fills that solution directory, which starts **empty** — it decides what to take from a parent and what to write from scratch. It can run `<evaluate> validate <dir>` as often as it likes; the moment that passes on changed code, its turn ends.
 4. Optiverse runs `<evaluate> score <dir>` and records the score, metrics and lineage.
 
-The agent is told whether its own code is **valid**, never how it **scores**. It sees the parent solutions' scores as context, but it has no way to measure its own work — and that is the point. Ranking candidates is the search loop's job; an agent that could score itself would abandon a novel approach as soon as it looked worse than the incumbent, which is the very move that escapes local optima.
+Every parent the agent sees is a copy it owns, so nothing it does can reach a stored solution. Nothing is made read-only; the originals are simply never named.
+
+The agent is told whether its own code is **valid**, never how it **scores**. It can read the parent solutions' scores, but it has no way to measure its own work — and that is the point. Ranking candidates is the search loop's job; an agent that could score itself would abandon a novel approach as soon as it looked worse than the incumbent, which is the very move that escapes local optima.
 
 ## Use Cases
 
@@ -135,6 +137,7 @@ or generator sets becomes a `t_*` column, so `t_exit_status` and
 Each solution has a dedicated directory named after its ID, containing:
 
 - `code/`: The solution itself — a directory, with however many files the agent chose to write.
+- `references/<parent_id>/`: The copy of each parent the agent was given, holding that parent's `code/` and a `metadata.txt` with its score and metrics.
 - `agent.log`: The agent's full trajectory, including every command it ran.
 - `metadata.json`: ID, score, metrics and tags.
 

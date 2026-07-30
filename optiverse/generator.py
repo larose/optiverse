@@ -1,33 +1,28 @@
 """The generation seam.
 
-A generator is handed a codebase directory that already contains the chosen
-parent, and edits it in place. Nothing is returned but metadata: the codebase
+A generator is handed an empty codebase directory and the parents it may build
+from, and fills the directory in. Nothing is returned but metadata: the codebase
 *is* the output, and it is already where it belongs.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Union
-
-
-@dataclass(frozen=True)
-class ReferenceCodebase:
-    """A parent the agent may read but must not edit."""
-
-    path: Path
-    title: str
-    score: Optional[float]
+from typing import Callable, Dict, Union
 
 
 @dataclass(frozen=True)
 class GenerationContext:
     codebase: Path
-    """The working directory. Seeded with the primary parent; edited in place."""
+    """The working directory. Empty; whatever ends up here is the solution."""
 
     log_path: Path
     prompt: str
-    references: List[ReferenceCodebase]
+
+    references_directory: Path
+    """Copies of the parents, one directory per solution id, each holding `code/`
+    and a `metadata.txt`. They are the generator's own copies, so it may do as it
+    likes with them. Empty when the search had no parents to offer."""
 
     validate: Callable[[], bool]
     """Whether `codebase` is currently valid.

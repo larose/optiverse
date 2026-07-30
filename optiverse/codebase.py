@@ -21,9 +21,9 @@ def relative_files(root: Path) -> List[str]:
 def materialize(source: Path, destination: Path) -> None:
     """Copy `source` to `destination` and make sure the result is writable.
 
-    Stored codebases are read-only (see `make_read_only`) and `copytree`
-    preserves mode bits, so the copy has to be made writable again or the agent
-    could not edit it.
+    `copytree` preserves mode bits, so a source the agent must be able to edit —
+    a seed codebase checked out read-only, a solution from a run made before
+    stored codebases became writable — would otherwise arrive unwritable.
     """
     shutil.copytree(source, destination, dirs_exist_ok=True)
     make_writable(destination)
@@ -45,34 +45,11 @@ def digest(root: Path) -> str:
     return hasher.hexdigest()
 
 
-def _change_mode(root: Path, *, add: int, remove: int) -> None:
+def make_writable(root: Path) -> None:
+    """Add write permission across the tree, leaving other mode bits alone."""
     for path in [root, *root.rglob("*")]:
         current = stat.S_IMODE(path.stat().st_mode)
-        path.chmod((current | add) & ~remove)
-
-
-def make_read_only(root: Path) -> None:
-    """Drop write permission across the tree.
-
-    Stored solutions are population members that later iterations re-read, so
-    making them read-only turns "do not edit a parent" from a convention into a
-    property the filesystem enforces.
-    """
-    _change_mode(root, add=0, remove=stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-
-
-def make_writable(root: Path) -> None:
-    """Restore write permission across the tree."""
-    _change_mode(root, add=stat.S_IWUSR, remove=0)
-
-
-def remove_tree(root: Path) -> None:
-    """Delete a tree even if `make_read_only` was applied to it."""
-    if not root.exists():
-        return
-
-    make_writable(root)
-    shutil.rmtree(root)
+        path.chmod(current | stat.S_IWUSR)
 
 
 def describe(root: Path) -> str:

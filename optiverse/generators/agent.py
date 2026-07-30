@@ -20,15 +20,11 @@ it is suppressed for this file only.
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, cast
+from pathlib import Path
+from typing import Any, Dict, Optional, Set, cast
 
 from .. import codebase as codebase_helpers
-from ..generator import (
-    GenerationContext,
-    GenerationResult,
-    Generator,
-    ReferenceCodebase,
-)
+from ..generator import GenerationContext, GenerationResult, Generator
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +44,8 @@ INSTANCE_TEMPLATE = """{{task}}
 
 # Your working directory
 
-You are working in `{{optiverse_codebase}}`, which already contains the starting
-solution. Edit it in place. You may add, modify and delete files there.
+You are working in `{{optiverse_codebase}}`. It is **empty**. Whatever you leave
+there is your solution, and nothing outside it is.
 
 {{optiverse_references}}
 
@@ -72,8 +68,9 @@ judged after you finish. Do not try to measure or optimise runtime.
 
 - Leave no build artifacts, binaries or caches in the working directory. Build in
   a temporary directory if you need to.
-- Do not edit anything outside your working directory. Other solutions are
-  read-only.
+- The parent copies are yours. Read them, edit them, delete them — none of it
+  reaches the stored solutions they were copied from.
+- Do not edit anything outside your working directory and those copies.
 
 ## Response format
 
@@ -216,7 +213,7 @@ class AgentGenerator(Generator):
 
         agent.extra_template_vars |= {
             "optiverse_codebase": str(context.codebase),
-            "optiverse_references": _render_references(context.references),
+            "optiverse_references": _render_references(context.references_directory),
             "optiverse_validate_command": context.validate_shell_command,
         }
 
@@ -268,21 +265,38 @@ class AgentGenerator(Generator):
         return str(outcome.get("exit_status", "Unknown"))
 
 
-def _render_references(references: List[ReferenceCodebase]) -> str:
-    """Point at the other parents rather than pasting them into the prompt."""
-    if not references:
+def _render_references(directory: Path) -> str:
+    """Point at the parent copies rather than pasting them into the prompt.
+
+    Listed from disk rather than from a parallel list handed in, so the section
+    cannot claim a parent that is not there.
+    """
+    if not directory.is_dir():
+        return ""
+
+    identifiers = sorted(path.name for path in directory.iterdir() if path.is_dir())
+
+    if not identifiers:
         return ""
 
     lines = [
-        "# Other solutions you may read",
+        "# The parent solutions",
         "",
-        "These are read-only. Read them if useful; you do not have to.",
+        f"Each one named in the task above has a copy in `{directory}`:",
         "",
     ]
 
-    for reference in references:
-        lines.append(
-            f"- {reference.title} (score {reference.score}): `{reference.path}`"
-        )
+    for identifier in identifiers:
+        lines.append(f"- `{identifier}/`")
+
+    lines += [
+        "",
+        "Each holds `code/`, the solution itself, and `metadata.txt`, its score",
+        "and metrics. To start from one of them:",
+        "",
+        "```",
+        f"cp -r {directory}/<id>/code/. .",
+        "```",
+    ]
 
     return "\n".join(lines) + "\n"

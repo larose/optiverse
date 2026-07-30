@@ -1,10 +1,10 @@
 """Prompt construction.
 
-The prompt describes *what to do*: the problem, what the parent solutions
-achieved, and the task. It deliberately does not inline source code — the parents
-are directories on disk, and the generator tells the agent where they are. That
-keeps a three-parent prompt from carrying three whole codebases, and lets the
-agent read only what it decides to read.
+The prompt describes *what to do*: the problem, which parents to work from, and
+the task. It deliberately carries neither source code nor scores — the parents
+are directories on disk, each with its own `metadata.txt`, and the generator
+tells the agent where they are. That keeps a three-parent prompt from carrying
+three whole codebases, and lets the agent read only what it decides to read.
 """
 
 from abc import ABC, abstractmethod
@@ -42,18 +42,13 @@ class DefaultPromptGenerator(PromptGenerator):
             sections.append("")
 
         for solution_with_title in context.strategy_result.solutions:
-            solution = solution_with_title.solution
+            sections.append(
+                f"- {solution_with_title.title}: "
+                f"`{solution_with_title.solution.id}`"
+            )
 
-            sections.append(f"## {solution_with_title.title}")
+        if context.strategy_result.solutions:
             sections.append("")
-            sections.append(f"Score: {solution.score}")
-            sections.append("")
-
-            if solution.metrics:
-                sections.append("Metrics:")
-                for name, value in solution.metrics.items():
-                    sections.append(f"  - {name}: {value}")
-                sections.append("")
 
         sections.append("# Task")
         sections.append("")

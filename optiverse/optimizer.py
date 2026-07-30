@@ -2,17 +2,19 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, Optional, Union, cast
 
 from . import codebase as codebase_helpers
 from .config import OptimizerConfig
 from .evaluator import SCORE, VALIDATE, EvaluatorError, ScoreResult
-from .generator import GenerationContext, GenerationResult, ReferenceCodebase
+from .generator import GenerationContext, GenerationResult
 from .prompt_generator import DefaultPromptGenerator, PromptGeneratorContext
 from .search_strategies import SearchContext, SearchResult
-from .store import FileSystemStore, Solution
+from .store import CODE_DIRECTORY_NAME, FileSystemStore, Solution
 
 logger = logging.getLogger(__name__)
+
+REFERENCE_METADATA_NAME = "metadata.txt"
 
 
 class Optimizer:
@@ -42,15 +44,14 @@ class Optimizer:
         solution_id = self._store.allocate()
         codebase = self._store.codebase_path(solution_id)
 
-        seed = self._seed_codebase(strategy_result)
-        codebase_helpers.materialize(seed, codebase)
-
         generation_result = self._generator.generate(
             GenerationContext(
                 codebase=codebase,
                 log_path=self._store.agent_log_path(solution_id),
                 prompt=prompt,
-                references=self._references(strategy_result),
+                references_directory=self._copy_references(
+                    strategy_result, solution_id
+                ),
                 validate=lambda: self._evaluator.validate(codebase),
                 validate_shell_command=self._evaluator.shell_command(
                     VALIDATE, codebase
@@ -77,23 +78,27 @@ class Optimizer:
         else:
             logger.info(f"Saved solution {solution_id}, score: {score_result.score}")
 
-    def _seed_codebase(self, strategy_result: SearchResult) -> Path:
-        """The codebase the agent starts from."""
-        if not strategy_result.solutions:
-            return self._config.problem.initial_codebase
+    def _copy_references(self, strategy_result: SearchResult, solution_id: str) -> Path:
+        """Give the agent its own copy of every parent, named by solution id.
 
-        return strategy_result.solutions[0].solution.codebase
+        Copies rather than paths into the population: the agent can then read,
+        edit or throw them away without any of that reaching a stored solution.
+        The codebase it starts from is empty, so what it takes from a parent is
+        its decision rather than ours.
+        """
+        references_directory = self._store.references_path(solution_id)
+        references_directory.mkdir(parents=True, exist_ok=True)
 
-    def _references(self, strategy_result: SearchResult) -> List[ReferenceCodebase]:
-        """Parents beyond the first, offered as read-only paths rather than copies."""
-        return [
-            ReferenceCodebase(
-                path=solution_with_title.solution.codebase,
-                title=solution_with_title.title,
-                score=solution_with_title.solution.score,
+        for solution_with_title in strategy_result.solutions:
+            solution = solution_with_title.solution
+            reference = references_directory / solution.id
+
+            codebase_helpers.materialize(
+                solution.codebase, reference / CODE_DIRECTORY_NAME
             )
-            for solution_with_title in strategy_result.solutions[1:]
-        ]
+            (reference / REFERENCE_METADATA_NAME).write_text(_render_metadata(solution))
+
+        return references_directory
 
     def _tags(
         self, strategy_result: SearchResult, generation_result: GenerationResult
@@ -256,3 +261,26 @@ class Optimizer:
         logger.info(f"Score: {best_solution.score}")
         logger.info(f"Codebase: {best_solution.codebase}")
         logger.info(f"Files:\n{codebase_helpers.describe(best_solution.codebase)}")
+
+
+def _render_metadata(solution: Solution) -> str:
+    """What a parent looks like to the agent, now that the prompt says nothing.
+
+    Score and metrics only. The id is the directory's own name, and the tags
+    describe the search's bookkeeping rather than the solution.
+    """
+    score = "unscored" if solution.score is None else solution.score
+
+    lines = [
+        f"Solution: {solution.id}",
+        "",
+        f"Score: {score}",
+        "Lower is better.",
+    ]
+
+    if solution.metrics:
+        lines.append("")
+        lines.append("Metrics:")
+        lines.extend(f"  {name}: {value}" for name, value in solution.metrics.items())
+
+    return "\n".join(lines) + "\n"
