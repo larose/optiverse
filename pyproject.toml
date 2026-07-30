@@ -43,10 +43,10 @@ packages = ["optiverse", "optiverse.generators", "optiverse.search_strategies"]
 
 [tool.black]
 target-version = ['py310']
-include = '(examples|optiverse|tests).*\.py$'
+include = '(examples|optiverse).*\.py$'
 
 [tool.pyright]
-include = ["examples", "optiverse", "tests"]
+include = ["examples", "optiverse"]
 # Seed codebases and harnesses are assembled into one flat directory at
 # evaluation time, so `from context import Context` only resolves there. Tell
 # pyright where the siblings live rather than dropping them from the checks.

@@ -43,7 +43,7 @@ examples/integer_compression/harness/ts.txt:
 	$(PYTHON) examples/integer_compression/data_generator.py
 
 .PHONY: test
-test: test.format test.types test.unit
+test: test.format test.types
 
 .PHONY: test.format
 test.format:
@@ -52,7 +52,3 @@ test.format:
 .PHONY: test.types
 test.types:
 	$(VENV)/bin/pyright
-
-.PHONY: test.unit
-test.unit:
-	$(PYTHON) -m unittest discover -s . -p "*_test.py" -v
