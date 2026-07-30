@@ -4,7 +4,7 @@ A solution is a directory:
 
     <run>/<id>/code/          the codebase; read-only once committed
     <run>/<id>/agent.log      the agent's trajectory
-    <run>/<id>/metadata.json  score, metrics, tags, description
+    <run>/<id>/metadata.json  score, metrics, tags
 
 Ids are allocated *before* generation so the agent can work directly in
 `<id>/code/` rather than in a scratch directory that then has to be copied in.
@@ -27,14 +27,12 @@ from . import codebase as codebase_helpers
 
 CODE_DIRECTORY_NAME = "code"
 AGENT_LOG_NAME = "agent.log"
-DESCRIPTION_NAME = "description.txt"
 METADATA_NAME = "metadata.json"
 
 
 @dataclass(frozen=True)
 class Solution:
     codebase: Path
-    description: Optional[str]
     id: str
     is_initial: bool
     metrics: Dict[str, Union[float, int]]
@@ -54,19 +52,10 @@ class Store(ABC):
     def agent_log_path(self, solution_id: str) -> Path: ...
 
     @abstractmethod
-    def description_path(self, solution_id: str) -> Path:
-        """A scratch path outside the codebase for the generator's summary.
-
-        Kept out of `code/` so a description never becomes part of the solution
-        it describes, and so it is not inherited by children.
-        """
-
-    @abstractmethod
     def commit(
         self,
         solution_id: str,
         *,
-        description: Optional[str],
         is_initial: bool,
         metrics: Dict[str, Union[int, float]],
         score: Optional[float],
@@ -99,14 +88,10 @@ class FileSystemStore(Store):
     def agent_log_path(self, solution_id: str) -> Path:
         return self._solution_directory(solution_id) / AGENT_LOG_NAME
 
-    def description_path(self, solution_id: str) -> Path:
-        return self._solution_directory(solution_id) / DESCRIPTION_NAME
-
     def commit(
         self,
         solution_id: str,
         *,
-        description: Optional[str],
         is_initial: bool,
         metrics: Dict[str, Union[int, float]],
         score: Optional[float],
@@ -120,7 +105,6 @@ class FileSystemStore(Store):
         codebase_helpers.make_read_only(self.codebase_path(solution_id))
 
         metadata = {
-            "description": description,
             "id": solution_id,
             "is_initial": is_initial,
             "metrics": metrics,
@@ -158,7 +142,6 @@ class FileSystemStore(Store):
             solutions.append(
                 Solution(
                     codebase=solution_directory / CODE_DIRECTORY_NAME,
-                    description=cast(Optional[str], metadata.get("description")),
                     id=cast(str, metadata["id"]),
                     is_initial=cast(bool, metadata["is_initial"]),
                     metrics=cast(Dict[str, Union[float, int]], metadata["metrics"]),

@@ -55,11 +55,6 @@ class DefaultPromptGenerator(PromptGenerator):
                     sections.append(f"  - {name}: {value}")
                 sections.append("")
 
-            if solution.description is not None:
-                sections.append("### Description")
-                sections.append(solution.description)
-                sections.append("")
-
         sections.append("# Task")
         sections.append("")
         sections.append(context.strategy_result.task)

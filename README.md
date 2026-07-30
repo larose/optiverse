@@ -136,7 +136,7 @@ Each solution has a dedicated directory named after its ID, containing:
 
 - `code/`: The solution itself — a directory, with however many files the agent chose to write.
 - `agent.log`: The agent's full trajectory, including every command it ran.
-- `metadata.json`: ID, score, metrics, tags and the agent's own description of its approach.
+- `metadata.json`: ID, score, metrics and tags.
 
 There is deliberately no stored evaluator log. It is reproducible from the files
 that are kept, and re-running gives fuller output than a stale copy:

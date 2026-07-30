@@ -48,7 +48,6 @@ class Optimizer:
         generation_result = self._generator.generate(
             GenerationContext(
                 codebase=codebase,
-                description_path=self._store.description_path(solution_id),
                 log_path=self._store.agent_log_path(solution_id),
                 prompt=prompt,
                 references=self._references(strategy_result),
@@ -65,9 +64,6 @@ class Optimizer:
 
         self._store.commit(
             solution_id,
-            description=self._take_description(
-                generation_result, self._store.description_path(solution_id)
-            ),
             is_initial=False,
             metrics={**score_result.metrics, **generation_result.metrics},
             score=score_result.score,
@@ -80,25 +76,6 @@ class Optimizer:
             logger.info(f"Saved unscoreable solution {solution_id} for inspection")
         else:
             logger.info(f"Saved solution {solution_id}, score: {score_result.score}")
-
-    def _take_description(
-        self, generation_result: GenerationResult, description_path: Path
-    ) -> Optional[str]:
-        """Prefer the description the generator wrote to disk, then consume it.
-
-        The file is removed once read so the description lives in exactly one
-        place: metadata.json.
-        """
-        if generation_result.description is not None:
-            return generation_result.description
-
-        if not description_path.is_file():
-            return None
-
-        description = description_path.read_text().strip()
-        description_path.unlink()
-
-        return description or None
 
     def _seed_codebase(self, strategy_result: SearchResult) -> Path:
         """The codebase the agent starts from."""
@@ -220,7 +197,6 @@ class Optimizer:
 
         self._store.commit(
             solution_id,
-            description=None,
             is_initial=True,
             metrics=score_result.metrics,
             score=score_result.score,
@@ -280,6 +256,3 @@ class Optimizer:
         logger.info(f"Score: {best_solution.score}")
         logger.info(f"Codebase: {best_solution.codebase}")
         logger.info(f"Files:\n{codebase_helpers.describe(best_solution.codebase)}")
-
-        if best_solution.description:
-            logger.info(f"\nExplanation:\n{best_solution.description}")

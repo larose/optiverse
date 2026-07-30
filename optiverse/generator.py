@@ -25,10 +25,6 @@ class GenerationContext:
     codebase: Path
     """The working directory. Seeded with the primary parent; edited in place."""
 
-    description_path: Path
-    """Where the generator may leave a summary. Outside `codebase`, so a
-    description never becomes part of the solution it describes."""
-
     log_path: Path
     prompt: str
     references: List[ReferenceCodebase]
@@ -51,9 +47,6 @@ class GenerationResult:
 
     tags: Dict[str, Union[int, str]]
     """Categorical outcomes, such as the agent's exit status."""
-
-    description: Optional[str] = None
-    """Set only if the generator did not write to `GenerationContext.description_path`."""
 
 
 class Generator(ABC):

@@ -68,12 +68,6 @@ ends immediately** — you do not need to submit anything.
 It reports validity only. It says nothing about how good the solution is; that is
 judged after you finish. Do not try to measure or optimise runtime.
 
-# Before you finish
-
-Write two or three plain sentences describing the approach you took to
-`{{optiverse_description_path}}`. A later agent reads this to understand what was
-already tried, so describe the idea, not the edits.
-
 # Rules
 
 - Leave no build artifacts, binaries or caches in the working directory. Build in
@@ -222,7 +216,6 @@ class AgentGenerator(Generator):
 
         agent.extra_template_vars |= {
             "optiverse_codebase": str(context.codebase),
-            "optiverse_description_path": str(context.description_path),
             "optiverse_references": _render_references(context.references),
             "optiverse_validate_command": context.validate_shell_command,
         }
