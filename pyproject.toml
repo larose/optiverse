@@ -50,7 +50,11 @@ include = ["examples", "optiverse", "tests"]
 # Seed codebases and harnesses are assembled into one flat directory at
 # evaluation time, so `from context import Context` only resolves there. Tell
 # pyright where the siblings live rather than dropping them from the checks.
-extraPaths = ["examples/tsp/harness", "examples/tsp/initial"]
+extraPaths = [
+    "examples/integer_compression/harness",
+    "examples/tsp/harness",
+    "examples/tsp/initial",
+]
 pythonVersion = "3.10"
 typeCheckingMode = "strict"
 reportMissingImports = true

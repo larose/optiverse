@@ -36,11 +36,11 @@ run.tsp:
 	$(PYTHON) -m examples.tsp.optimize
 
 .PHONY: run.integer_compression
-run.integer_compression: examples/integer_compression/harness/ts.txt
-	$(PYTHON) examples/integer_compression/main.py
+run.integer_compression: examples/integer_compression/harness/ts.bin
+	$(PYTHON) -m examples.integer_compression.optimize
 
-examples/integer_compression/harness/ts.txt:
-	$(PYTHON) examples/integer_compression/data_generator.py
+examples/integer_compression/harness/ts.bin:
+	$(PYTHON) examples/integer_compression/harness/dataset.py
 
 .PHONY: test
 test: test.format test.types test.unit

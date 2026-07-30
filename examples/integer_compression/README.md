@@ -8,17 +8,57 @@ See [problem.md](problem.md) for the complete problem description and requiremen
 
 ## Layout
 
-- [initial/](initial/) — the seed codebase. The agent works on a copy of this and may add, rename or delete `.go` files; the evolvable unit is the whole package, not one file.
-- [harness/](harness/) — owned by the evaluator, never editable by a candidate.
-  - `score/main.go` benchmarks against `ts.txt` and prints `>>> decompression_time` and friends.
-  - `validate/main.go` checks `Decompress(Compress(data)) == data` across twelve synthetic cases, including block boundaries at 127/128/129 and values at `MaxUint32`. It needs no dataset and finishes in milliseconds, which is what makes it usable inside the agent's loop.
-- [evaluate.py](evaluate.py) — the evaluator command. Assembles a package from the candidate's `.go` files plus the harness, so `main.go` and `go.mod` in a candidate are ignored rather than able to alter the benchmark.
+- [optimize.py](optimize.py) — starts an optimization run. `make run.integer_compression` runs it.
+- [initial/](initial/) — the seed codebase: a `compressor.go` that serialises the values unchanged. The first solution is a copy of this, and every later one descends from it. The evolvable unit is the whole package, not one file.
+- [harness/](harness/) — everything the example owns for measuring. Never copied into a codebase and never visible to an agent.
+  - `evaluate.py` — the evaluator command, and the only thing here anyone else calls. `score` builds the candidate and takes three timings; `validate` builds it and round-trips the synthetic cases.
+  - `score/main.go` — compresses the dataset, times `Decompress`, writes what it measured.
+  - `validate/main.go` — checks `Decompress(Compress(data)) == data` across eighteen synthetic cases: block boundaries at 127/128/129, values at `MaxUint32`, and repeated values, which are what the real dataset is almost entirely made of. It needs no dataset and finishes in milliseconds, which is what makes it usable inside the agent's loop.
+  - `dataset.py` — fetches `ts.txt` and converts it once into `ts.bin`.
+  - `ts.txt`, `ts.bin` — the benchmark data. Gitignored, and they live here and nowhere else.
 
-Scoring needs the benchmark dataset (~1.6 GB, gitignored):
+The agent has no way to run any of it. It writes Go and calls `validate`, which
+answers valid or invalid with diagnostics and nothing more.
+
+Scoring needs the benchmark dataset (~1.6 GB downloaded, ~577 MB converted, both gitignored):
 
 ```bash
-make run.integer_compression   # downloads ts.txt on first run
+make run.integer_compression   # fetches and converts on first run
 ```
+
+## How a candidate is measured
+
+`evaluate.py` builds a workspace, compiles it, and deletes it afterwards:
+
+```
+workspace/
+  go.mod  main.go     <- from harness/, either score/ or validate/
+  candidate/          <- the codebase, verbatim
+  bench               <- the built binary
+```
+
+The candidate is its own Go package, imported by `main.go` as
+`harness/candidate`. Being a separate package is what makes it safe to let a
+codebase be a directory of arbitrary files: nothing it contains can stand in for
+anything the harness owns, whatever it names its files, so there is no reserved
+name list and nothing has to be overwritten.
+
+Scoring compiles once and then runs the binary three times, each in a directory
+of its own with the environment scrubbed. Separate processes, so a result cached
+on one run is not there for the next, and the timing is the average of the three.
+
+The binary writes its timings to a file rather than printing them, so a candidate
+debugging on stdout cannot corrupt its own score. It also writes out the
+compressed bytes, which `evaluate.py` sizes itself, so the compression ratio is a
+measurement rather than a number the harness was asked to report. Ratio is
+recorded, not scored: the score is decompression time alone.
+
+One thing is *not* closed. `Decompress` is timed inside the process it runs in, so
+code compiled into that binary could in principle report a time it did not
+achieve. Closing it would mean measuring from outside, which for a benchmark this
+short costs more in verification overhead than the measurement itself is worth.
+The TSP example takes the opposite tradeoff, because a tour length is something
+its evaluator can simply recompute.
 
 ## Solution Found by Optiverse
 
@@ -28,6 +68,21 @@ After approximately 1000 iterations, using Qwen3-235B-A22B as the LLM, Optiverse
 ## Benchmark Results
 
 Performance was benchmarked against well-known C implementations using this [benchmark suite](https://github.com/vteromero/integer-compression-benchmarks)
+
+These numbers were measured under the previous harness, on the CPU named below,
+parsing `ts.txt` directly and running its three repetitions inside one process.
+The current harness reads `ts.bin` and gives each repetition its own process, so
+each run pays for faulting in its own output rather than amortising that across
+the three. Figures produced now are therefore not comparable with the table
+below — only with each other, which is all the search needs.
+
+For reference, on the machine this was reworked on, the current harness scores
+the seed at ~653 ms (ratio 1.0) and the evolved solution below at ~459 ms
+(ratio 230.0):
+
+```bash
+python examples/integer_compression/harness/evaluate.py score <codebase>
+```
 
 
 | Algorithm          | Decoding Speed (GB/s) | Compression Ratio |
@@ -47,7 +102,7 @@ CPU: Intel Core i5-6500T @ 2.50GHz
 ## Full Solution Code
 
 ```go
-package main
+package candidate
 
 import (
 	"encoding/binary"

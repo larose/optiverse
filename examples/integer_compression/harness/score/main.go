@@ -1,132 +1,155 @@
+// Scoring harness: compress the dataset, time decompression, report.
+//
+// One measurement per process. The evaluator runs this binary several times and
+// averages, so nothing a candidate parks in package state on one run is there
+// for the next.
+//
+// The candidate is a separate package, imported here. It cannot redefine
+// anything in this file, and it is never handed the dataset path -- that arrives
+// on this process's command line and is read before any candidate code runs.
+//
+// Measurements go to a file rather than stdout. A candidate is free to print
+// whatever it likes while debugging without corrupting its own score, and the
+// compressed bytes are written out so the evaluator can size them itself instead
+// of trusting a ratio this process reports.
 package main
 
 import (
-	"bufio"
+	"encoding/binary"
+	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"os"
-	"strconv"
-	"strings"
 	"time"
+
+	"harness/candidate"
 )
 
-const numRuns = 3
+// Read in chunks rather than slurping the file: the dataset is ~577 MB and the
+// decoded slice is another 577 MB, so holding both at once doubles the peak.
+const readBufferSize = 1 << 20
 
-func loadTestData(filename string) ([]uint32, error) {
-	file, err := os.Open(filename)
+type measurements struct {
+	CompressionTimeMS   float64 `json:"compression_time_ms"`
+	DecompressionTimeMS float64 `json:"decompression_time_ms"`
+	ValueCount          int     `json:"value_count"`
+}
+
+func readValues(path string) ([]uint32, error) {
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	var result []uint32
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue // Skip empty lines
-		}
-
-		val, err := strconv.ParseUint(line, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("invalid integer on line: %s", line)
-		}
-
-		result = append(result, uint32(val))
-	}
-
-	if err := scanner.Err(); err != nil {
+	info, err := file.Stat()
+	if err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	size := info.Size()
+	if size%4 != 0 {
+		return nil, fmt.Errorf("%s holds %d bytes, not a whole number of uint32s", path, size)
+	}
+
+	values := make([]uint32, size/4)
+	buffer := make([]byte, readBufferSize)
+	index := 0
+
+	for {
+		n, err := io.ReadFull(file, buffer)
+
+		for offset := 0; offset+4 <= n; offset += 4 {
+			values[index] = binary.LittleEndian.Uint32(buffer[offset:])
+			index++
+		}
+
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if index != len(values) {
+		return nil, fmt.Errorf("%s: read %d of %d values", path, index, len(values))
+	}
+
+	return values, nil
 }
 
-func calculateOriginalSize(data []uint32) int {
-	return len(data) * 4 // 4 bytes per uint32
+// verify checks the round trip. Reported before any timing is trusted, because
+// a fast wrong answer is not an answer.
+func verify(original, decompressed []uint32) error {
+	if len(decompressed) != len(original) {
+		return fmt.Errorf(
+			"length mismatch: got %d values, want %d", len(decompressed), len(original),
+		)
+	}
+
+	for i := range original {
+		if decompressed[i] != original[i] {
+			return fmt.Errorf(
+				"value mismatch at index %d: got %d, want %d",
+				i, decompressed[i], original[i],
+			)
+		}
+	}
+
+	return nil
+}
+
+func write(path string, compressed []byte, measured measurements) error {
+	if err := os.WriteFile(path+".bin", compressed, 0o644); err != nil {
+		return err
+	}
+
+	encoded, err := json.Marshal(measured)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path+".json", encoded, 0o644)
+}
+
+func run() error {
+	instancePath := flag.String("instance", "", "dataset, raw little-endian uint32")
+	outputPrefix := flag.String("output", "", "prefix for <prefix>.bin and <prefix>.json")
+	flag.Parse()
+
+	if *instancePath == "" || *outputPrefix == "" {
+		return fmt.Errorf("both -instance and -output are required")
+	}
+
+	data, err := readValues(*instancePath)
+	if err != nil {
+		return err
+	}
+
+	start := time.Now()
+	compressed := candidate.Compress(data)
+	compressionTime := time.Since(start)
+
+	start = time.Now()
+	decompressed := candidate.Decompress(compressed)
+	decompressionTime := time.Since(start)
+
+	if err := verify(data, decompressed); err != nil {
+		return err
+	}
+
+	return write(*outputPrefix, compressed, measurements{
+		CompressionTimeMS:   float64(compressionTime.Nanoseconds()) / 1e6,
+		DecompressionTimeMS: float64(decompressionTime.Nanoseconds()) / 1e6,
+		ValueCount:          len(data),
+	})
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <test_data_file>\n", os.Args[0])
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	// Load test data
-	data, err := loadTestData(os.Args[1])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading data: %v\n", err)
-		os.Exit(1)
-	}
-
-	originalSize := calculateOriginalSize(data)
-
-	// Run multiple times and collect metrics
-	var decompressionTimes []int64
-	var compressionTimes []int64
-	var compressionRatios []float64
-
-	for run := 0; run < numRuns; run++ {
-		// Measure compression
-		start := time.Now()
-		compressed := Compress(data)
-		compressionTime := time.Since(start)
-		compressedSize := len(compressed)
-
-		// Measure decompression
-		start = time.Now()
-		decompressed := Decompress(compressed)
-		decompressionTime := time.Since(start)
-
-		// Verify correctness
-		if len(decompressed) != len(data) {
-			fmt.Fprintf(os.Stderr, "Length mismatch: got %d, expected %d\n",
-				len(decompressed), len(data))
-			os.Exit(1)
-		}
-		for j := range data {
-			if decompressed[j] != data[j] {
-				fmt.Fprintf(os.Stderr, "Data mismatch at index %d: got %d, expected %d\n",
-					j, decompressed[j], data[j])
-				os.Exit(1)
-			}
-		}
-
-		compressionRatio := float64(originalSize) / float64(compressedSize)
-
-		// Calculate speeds in GB/s for this run
-		compressionSpeedGBs := float64(originalSize) / compressionTime.Seconds() / 1e9
-		decompressionSpeedGBs := float64(originalSize) / decompressionTime.Seconds() / 1e9
-
-		// Output per-run metrics
-		fmt.Printf("Original size: %d\n", originalSize)
-		fmt.Printf("Compressed size: %d\n", compressedSize)
-		fmt.Printf("Compression speed: %.3f GB/s\n", compressionSpeedGBs)
-		fmt.Printf("Decompression speed: %.3f GB/s\n", decompressionSpeedGBs)
-
-		// Collect metrics
-		decompressionTimes = append(decompressionTimes, decompressionTime.Milliseconds())
-		compressionTimes = append(compressionTimes, compressionTime.Milliseconds())
-		compressionRatios = append(compressionRatios, compressionRatio)
-	}
-
-	// Calculate averages
-	var totalDecompressionTime int64
-	var totalCompressionTime int64
-	var totalCompressionRatio float64
-
-	for i := 0; i < numRuns; i++ {
-		totalDecompressionTime += decompressionTimes[i]
-		totalCompressionTime += compressionTimes[i]
-		totalCompressionRatio += compressionRatios[i]
-	}
-
-	avgDecompressionTime := float64(totalDecompressionTime) / float64(numRuns)
-	avgCompressionTime := float64(totalCompressionTime) / float64(numRuns)
-	avgCompressionRatio := totalCompressionRatio / float64(numRuns)
-
-	// Output averaged metrics with >>> prefix
-	fmt.Printf(">>> decompression_time: %.0f\n", avgDecompressionTime)
-	fmt.Printf(">>> compression_ratio: %.3f\n", avgCompressionRatio)
-	fmt.Printf(">>> compression_time: %.0f\n", avgCompressionTime)
 }

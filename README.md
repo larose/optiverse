@@ -183,11 +183,23 @@ An evaluator is any executable that accepts two subcommands:
 Keep `validate` cheap. The agent runs it repeatedly, and it only has to answer
 "does this work", not "how good is it" — the integer compression example checks
 `Decompress(Compress(data)) == data` on a few thousand synthetic integers in
-milliseconds, while scoring streams a 1.6 GB dataset.
+milliseconds, while scoring streams a 577 MB dataset.
 
-Your evaluator owns its own test harness. Copy the candidate's files into a
-temporary directory and lay your harness over the top: that way a candidate
-cannot alter how it is measured, and the stored solution is never touched.
+Your evaluator owns its own test harness. Assemble a temporary workspace and put
+the candidate in a **subdirectory** of it, with your harness at the root: that
+way the stored solution is never touched, and a candidate cannot stand in for
+part of your harness no matter what it names its files. Both examples do this —
+TSP appends the candidate's directory to `sys.path`, so the standard library and
+the harness win every name collision; integer compression makes the candidate its
+own Go package. Laying your harness over the top of the candidate's files works
+only for the names you remember to list, so prefer the structural version.
+
+Be deliberate about what the candidate's own process is trusted to report. If the
+objective is something you can recompute — a tour length, a compressed size —
+have the candidate hand back the artifact and measure it yourself, so it chooses
+its answer but not what that answer is worth. If the objective is a timing, that
+separation costs more than it is worth, and the tradeoff is worth making
+consciously.
 
 If your evaluator is Python, `optiverse.evaluator_main` handles the argv and JSON
 plumbing:

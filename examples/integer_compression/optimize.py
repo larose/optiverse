@@ -32,10 +32,14 @@ def main() -> None:
         initial_codebase=EXAMPLE_DIRECTORY / "initial",
         # sys.executable rather than a shebang: the evaluator imports optiverse,
         # so it has to run under the interpreter optiverse is installed in.
-        evaluate_command=[sys.executable, str(EXAMPLE_DIRECTORY / "evaluate.py")],
-        # Scoring streams a 1.6 GB dataset through Compress/Decompress 3 times.
-        score_timeout_seconds=2400.0,
-        validate_timeout_seconds=300.0,
+        evaluate_command=[
+            sys.executable,
+            str(EXAMPLE_DIRECTORY / "harness" / "evaluate.py"),
+        ],
+        # Scoring compiles the candidate, then streams a 577 MB dataset through
+        # Compress/Decompress once per run, in a process per run.
+        score_timeout_seconds=600.0,
+        validate_timeout_seconds=120.0,
     )
 
     config = optiverse.config.OptimizerConfig(
