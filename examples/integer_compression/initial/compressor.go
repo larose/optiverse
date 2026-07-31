@@ -20,7 +20,7 @@ func Decompress(compressed []byte) []uint32 {
 	result := make([]uint32, len(compressed)/4)
 
 	for i := 0; i < len(result); i++ {
-		result[i] = binary.LittleEndian.Uint32(compressed[i*4:(i+1)*4])
+		result[i] = binary.LittleEndian.Uint32(compressed[i*4 : (i+1)*4])
 	}
 
 	return result
