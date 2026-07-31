@@ -1,4 +1,9 @@
-"""mini-swe-agent glue. Imported only when the `agent` extra is installed.
+"""mini-swe-agent glue, shared by both agents.
+
+Two things in this project are driven by a coding agent: the generator, which
+writes a candidate, and the strategist, which decides what to try next. They
+differ in their templates and their working directory, not in their plumbing, so
+the model layer, the limits and the validate-ends-your-turn environment live here.
 
 mini-swe-agent annotates several signatures with bare `dict`, which strict mode
 reports as partially unknown. The looseness is in the dependency, not here, so it
@@ -10,6 +15,7 @@ is suppressed for this file only.
 import logging
 import re
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, cast
 
@@ -21,12 +27,12 @@ from minisweagent.exceptions import Submitted
 from minisweagent.models.litellm_model import LitellmModel
 from minisweagent.models.litellm_textbased_model import LitellmTextbasedModel
 
-from .. import codebase as codebase_helpers
-from ..evaluator import EvaluatorError, ValidationResult
+from . import codebase as codebase_helpers
+from .evaluator import EvaluatorError, ValidationResult
 
 logger = logging.getLogger(__name__)
 
-VALIDATED_EXIT_STATUS = "Validated"
+VALIDATED_EXIT_STATUS = "validated"
 
 # The one word the agent types instead of a command. Never reaches a shell.
 VALIDATE_COMMAND = "validate"
@@ -61,6 +67,27 @@ _RETRY_DELAY_PATTERNS = (
 )
 
 
+DEFAULT_STEP_LIMIT = 40
+DEFAULT_COST_LIMIT = 0.0
+DEFAULT_WALL_TIME_LIMIT_SECONDS = 900
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 180
+
+
+@dataclass(frozen=True)
+class AgentLimits:
+    """Bounds on one agent run. All are enforced by mini-swe-agent itself.
+
+    `cost_limit` is off by default: mini-swe-agent reads 0 as "no limit". Spend is
+    still recorded per run as a metric, so it is observable without being
+    throttled. The bounds that always hold are the step and wall-time limits.
+    """
+
+    step_limit: int = DEFAULT_STEP_LIMIT
+    cost_limit: float = DEFAULT_COST_LIMIT
+    wall_time_limit_seconds: int = DEFAULT_WALL_TIME_LIMIT_SECONDS
+    command_timeout_seconds: int = DEFAULT_COMMAND_TIMEOUT_SECONDS
+
+
 def default_agent_config() -> Dict[str, Any]:
     """The `agent` section of mini-swe-agent's shipped default config.
 
@@ -69,6 +96,54 @@ def default_agent_config() -> Dict[str, Any]:
     """
     raw = yaml.safe_load((package_dir / "config" / "default.yaml").read_text())
     return cast(Dict[str, Any], cast(Dict[str, Any], raw)["agent"])
+
+
+def build_model(model_name: str) -> Any:
+    """The model layer, matched to the templates the agents are given.
+
+    Text-based rather than tool-calling: every template here describes the
+    ```mswea_bash_command fence, which is what this class's `action_regex` parses.
+    The tool-calling class would reject those replies as format errors, and would
+    also rule out every model without tool support.
+
+    `cost_tracking="ignore_errors"` because mini-swe-agent otherwise raises when
+    litellm cannot price a model — outside its own retry loop, losing the whole
+    iteration. A missing price is not a reason to discard a candidate.
+    """
+    return RateLimitAwareModel(
+        model_name=model_name,
+        model_kwargs={"drop_params": True},
+        cost_tracking="ignore_errors",
+    )
+
+
+# CamelCase boundaries, including the tail of an acronym: `HTTPError` splits
+# before `Error` rather than collapsing to `httperror`.
+_CAMEL_BOUNDARIES = (
+    re.compile(r"(?<=[a-z0-9])(?=[A-Z])"),
+    re.compile(r"(?<=[A-Z])(?=[A-Z][a-z])"),
+)
+
+
+def normalize_exit_status(status: str) -> str:
+    """Lower-case, underscore-separated, whatever spelling it arrived in.
+
+    Exit statuses reach us from three places: this module (`validated`),
+    mini-swe-agent's own protocol (`LimitsExceeded`,
+    `COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT`) and exception class names
+    (`RateLimitError`). Only the first is ours to spell, so normalising at the
+    boundary is what actually makes the stored values consistent.
+
+    The `error:` prefix keeps its colon, so a crash stays distinguishable from a
+    normal outcome at a glance.
+    """
+    return ":".join(_snake_case(part) for part in status.split(":"))
+
+
+def _snake_case(text: str) -> str:
+    for pattern in _CAMEL_BOUNDARIES:
+        text = pattern.sub("_", text)
+    return text.lower()
 
 
 def suggested_delay(error: Exception) -> Optional[float]:

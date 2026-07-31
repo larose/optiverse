@@ -29,15 +29,25 @@ deleted.
 **The evaluator is the objective.** Nothing else measures a candidate, not the
 agent that wrote it and not the model behind it.
 
+**The search is driven by an agent too.** A strategist with a shell and the run
+directory reads whatever it needs — a candidate's source, an agent's trajectory,
+the raw journal — and decides what to try next.
+
 Each iteration:
 
-1. The search strategy picks parent solutions and decides whether to exploit or
-   diversify. The default is an iterated local search, which improves on the
-   best solution so far and restarts or recombines when that stops paying off.
-2. An agent writes a new candidate, with the parents and their scores available
-   to read. It checks itself with `validate`, and its turn ends the moment that
-   passes on code it changed.
-3. Optiverse scores the result and records it with its metrics and lineage.
+1. The strategist picks a **branch** to work in and writes the brief. A branch is
+   a list of *constraints*: prose telling the coding agent how to narrow its
+   approach. The list *is* the branch, so going deeper means adding a constraint
+   and changing your mind means dropping back to a subset.
+2. A coding agent writes a new candidate under those constraints, with the chosen
+   parents and their scores available to read. It checks itself with `validate`,
+   and its turn ends the moment that passes on code it changed.
+3. Optiverse scores the result and appends the iteration to the journal — the
+   plan and its outcome on one line.
+
+The strategist sees every score; the coding agent sees none. Ranking is the
+strategist's job, and an agent that could see its own score would abandon a novel
+approach the moment it looked worse than the incumbent.
 
 ## Quick start
 
@@ -86,30 +96,43 @@ Each run writes to `tmp/YYYYMMDD_HHMMSS`, named for when it started:
 ```
 tmp/20260730_133833/
   solutions.csv                     the population, best score first
-  checkpoint.json                   where to resume from
-  <solution id>/
+  solutions/<solution id>/
     code/                           the solution itself
     references/<parent id>/         the copy of each parent the agent was given
     agent.log                       the agent's full trajectory
-    metadata.json                   id, score, metrics, tags
+    metadata.json                   id, score, metrics, tags, timing
+  strategist/
+    notebook.md                     the state of the search, readable
+    journal.jsonl                   one line per iteration, plan and outcome
+    knowledge.md                    what the strategist has learned holds
+    plan.json                       this iteration's decision
+    logs/00001.log                  the strategist's full trajectory
 ```
 
-In `solutions.csv`, every metric an evaluator returns becomes an `m_*` column
-and every tag a strategy or generator sets becomes a `t_*` column, so cost,
-lineage and problem-specific measurements plot without extra tooling. A
-candidate the evaluator could not score reads `FAILED` and sorts to the bottom.
+Start with `strategist/notebook.md`. It is the branch tree with attempts and
+scores, and it is exactly what the strategist reads — one artifact for both, so a
+search that is unreadable to you was unreadable to it.
 
-To resume, point a run at a directory it already wrote. It continues from the
-iteration after the last one that finished, with the population it had found:
+In `solutions.csv`, every metric an evaluator returns becomes an `m_*` column and
+every tag a generator or strategist sets becomes a `t_*` column, so cost and
+problem-specific measurements plot without extra tooling. A candidate the
+evaluator could not score reads `failed` and sorts to the bottom. Which branch a
+candidate belongs to and which parents it had are in `journal.jsonl` instead —
+constraints are paragraphs, which do not belong in a CSV cell — joined back by
+`solution_id`.
+
+To resume, point a run at a directory it already wrote. There is no checkpoint
+file: the journal has one line per finished iteration, so its length is where the
+run picks up, and an iteration that died partway through is simply re-run.
 
 ```bash
 DIRECTORY=tmp/20260730_133833 make run.tsp
 ```
 
 No evaluator log is kept, since re-running one beats a stale copy:
-`python examples/tsp/harness/evaluate.py score tmp/<run>/<id>/code`. A directory
-with no `metadata.json` is an iteration that died partway through; it is ignored
-and left for you to inspect.
+`python examples/tsp/harness/evaluate.py score tmp/<run>/solutions/<id>/code`. A
+directory with no `metadata.json` is an iteration that died partway through; it is
+ignored and left for you to inspect.
 
 ## Defining your own problem
 
@@ -118,6 +141,7 @@ A problem is a seed codebase, a description, and an evaluator command:
 ```python
 import optiverse
 from optiverse.generators.agent import AgentGenerator
+from optiverse.strategists.agent import AgentStrategist
 
 optiverse.optimizer.Optimizer(
     optiverse.config.OptimizerConfig(
@@ -129,16 +153,22 @@ optiverse.optimizer.Optimizer(
             initial_codebase=Path("initial"),
             evaluate_command=["./evaluate"],
         ),
-        search_strategy=optiverse.search_strategies.IteratedLocalSearch(
-            max_iterations_without_improvements=10
-        ),
+        strategist=AgentStrategist.from_env(),
     )
 ).run()
 ```
 
-That strategy improves the best solution it has until ten iterations pass
-without progress, then perturbs. Strategy and generator are interfaces, so
-either can be replaced.
+`Generator` and `Strategist` are both interfaces, so either agent can be
+replaced. The strategist reads `OPTIVERSE_STRATEGIST_MODEL`, falling back to
+`OPTIVERSE_MODEL`, so planning and coding can use different models without it
+being two variables until you care.
+
+The strategist is also given a **playbook**: angles for inventing a constraint
+the search has not tried, such as borrowing from another domain or inverting an
+assumption every branch shares. It is always in the prompt, and when the search
+stops improving one entry is named as a directive — least recently used, so the
+search is not shoved the same direction twice. It ships as `optiverse/playbook.md`
+and `OptimizerConfig.playbook` points somewhere else if you want your own.
 
 ### The evaluator contract
 

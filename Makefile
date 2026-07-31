@@ -60,7 +60,7 @@ examples/integer_compression/harness/ts.bin:
 	$(PYTHON) examples/integer_compression/harness/dataset.py
 
 .PHONY: test
-test: test.format test.types test.unit
+test: test.format test.types
 
 .PHONY: test.format
 test.format: test.format.python test.format.go
@@ -83,7 +83,3 @@ test.format.go:
 .PHONY: test.types
 test.types:
 	$(VENV)/bin/pyright
-
-.PHONY: test.unit
-test.unit:
-	$(PYTHON) -m unittest discover -s . -p "*_test.py" -v

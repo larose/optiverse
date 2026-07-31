@@ -4,13 +4,15 @@ There is nothing about models here. Optiverse knows about generators; a
 generator knows about whatever produces code.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
 from .evaluator import EvaluatorCommand
 from .generator import Generator
-from .search_strategies import SearchStrategy
+from .strategist import Strategist
+
+DEFAULT_PLAYBOOK = Path(__file__).parent / "playbook.md"
 
 
 @dataclass(frozen=True)
@@ -39,4 +41,11 @@ class OptimizerConfig:
     generator: Generator
     max_iterations: int
     problem: Problem
-    search_strategy: SearchStrategy
+    strategist: Strategist
+
+    playbook: Path = field(default=DEFAULT_PLAYBOOK)
+    """Angles for inventing a constraint the search has not tried.
+
+    Ships with the package because it is about how to search rather than about
+    any one problem — the only part of a run that transfers unchanged to the
+    next. Point it elsewhere to use your own."""

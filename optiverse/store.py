@@ -2,10 +2,14 @@
 
 A solution is a directory:
 
-    <run>/<id>/code/          the codebase
-    <run>/<id>/references/    copies of the parents this solution was built from
-    <run>/<id>/agent.log      the agent's trajectory
-    <run>/<id>/metadata.json  score, metrics, tags
+    <run>/solutions/<id>/code/          the codebase
+    <run>/solutions/<id>/references/    copies of the parents it was built from
+    <run>/solutions/<id>/agent.log      the agent's trajectory
+    <run>/solutions/<id>/metadata.json  score, metrics, tags, timing
+
+Solutions live under `solutions/` rather than at the run root so that the rest of
+a run — `solutions.csv`, the strategist's own directory — can sit beside them
+without `get_all_solutions` having to walk it and reject it.
 
 Ids are allocated *before* generation so the agent can work directly in
 `<id>/code/` rather than in a scratch directory that then has to be copied in.
@@ -24,6 +28,7 @@ import os
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Union, cast
 
@@ -31,6 +36,8 @@ CODE_DIRECTORY_NAME = "code"
 REFERENCES_DIRECTORY_NAME = "references"
 AGENT_LOG_NAME = "agent.log"
 METADATA_NAME = "metadata.json"
+SOLUTIONS_DIRECTORY_NAME = "solutions"
+SOLUTIONS_CSV_NAME = "solutions.csv"
 
 
 @dataclass(frozen=True)
@@ -41,6 +48,17 @@ class Solution:
     metrics: Dict[str, Union[float, int]]
     score: Optional[float]
     tags: Dict[str, Union[int, str]]
+
+    started_at: str
+    """When work on this solution began, ISO 8601 local time.
+
+    A field rather than a metric because it describes the solution's production
+    rather than its quality, and metrics are numeric-only — a timestamp would
+    land in solutions.csv as an unreadable epoch float."""
+
+    ended_at: str
+    """When it was committed. Elapsed is the difference; storing it too would be
+    a third column carrying no information the first two do not."""
 
 
 class Store(ABC):
@@ -70,9 +88,14 @@ class Store(ABC):
         is_initial: bool,
         metrics: Dict[str, Union[int, float]],
         score: Optional[float],
+        started_at: str,
         tags: Dict[str, Union[str, int]],
-    ) -> None:
-        """Finalise an allocated solution, making it visible to the loop."""
+    ) -> Solution:
+        """Finalise an allocated solution, making it visible to the loop.
+
+        Returns what it wrote, so a caller wanting to record the iteration does
+        not have to reassemble it or read it back off disk.
+        """
 
     @abstractmethod
     def get_all_solutions(self) -> List[Solution]: ...
@@ -86,8 +109,11 @@ class FileSystemStore(Store):
         # resolved, either: symlinks stay as the caller wrote them.
         self._directory = Path(os.path.abspath(directory))
 
+    def _solutions_directory(self) -> Path:
+        return self._directory / SOLUTIONS_DIRECTORY_NAME
+
     def _solution_directory(self, solution_id: str) -> Path:
-        return self._directory / solution_id
+        return self._solutions_directory() / solution_id
 
     def allocate(self) -> str:
         solution_id = uuid.uuid4().hex
@@ -110,19 +136,33 @@ class FileSystemStore(Store):
         is_initial: bool,
         metrics: Dict[str, Union[int, float]],
         score: Optional[float],
+        started_at: str,
         tags: Dict[str, Union[str, int]],
-    ) -> None:
+    ) -> Solution:
         solution_directory = self._solution_directory(solution_id)
 
         if not solution_directory.is_dir():
             raise ValueError(f"Solution {solution_id} was never allocated")
 
+        solution = Solution(
+            codebase=self.codebase_path(solution_id),
+            ended_at=datetime.now().isoformat(timespec="seconds"),
+            id=solution_id,
+            is_initial=is_initial,
+            metrics=metrics,
+            score=score,
+            started_at=started_at,
+            tags=tags,
+        )
+
         metadata = {
-            "id": solution_id,
-            "is_initial": is_initial,
-            "metrics": metrics,
-            "score": score,
-            "tags": tags,
+            "ended_at": solution.ended_at,
+            "id": solution.id,
+            "is_initial": solution.is_initial,
+            "metrics": solution.metrics,
+            "score": solution.score,
+            "started_at": solution.started_at,
+            "tags": solution.tags,
         }
 
         # Written atomically and last: its presence means the solution is whole.
@@ -133,13 +173,17 @@ class FileSystemStore(Store):
 
         self._write_solutions_csv()
 
+        return solution
+
     def get_all_solutions(self) -> List[Solution]:
         solutions: List[Solution] = []
 
-        if not self._directory.exists():
+        solutions_directory = self._solutions_directory()
+
+        if not solutions_directory.exists():
             return solutions
 
-        for solution_directory in sorted(self._directory.iterdir()):
+        for solution_directory in sorted(solutions_directory.iterdir()):
             if not solution_directory.is_dir():
                 continue
 
@@ -155,10 +199,12 @@ class FileSystemStore(Store):
             solutions.append(
                 Solution(
                     codebase=solution_directory / CODE_DIRECTORY_NAME,
+                    ended_at=cast(str, metadata["ended_at"]),
                     id=cast(str, metadata["id"]),
                     is_initial=cast(bool, metadata["is_initial"]),
                     metrics=cast(Dict[str, Union[float, int]], metadata["metrics"]),
                     score=cast(Optional[float], metadata["score"]),
+                    started_at=cast(str, metadata["started_at"]),
                     tags=cast(Dict[str, Union[int, str]], metadata["tags"]),
                 )
             )
@@ -184,11 +230,11 @@ class FileSystemStore(Store):
         sorted_tag_names = sorted(tag_names)
         sorted_metric_names = sorted(metric_names)
 
-        csv_path = self._directory / "solutions.csv"
+        csv_path = self._directory / SOLUTIONS_CSV_NAME
         with open(csv_path, "w", newline="") as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(
-                ["id", "score"]
+                ["id", "score", "started_at", "ended_at"]
                 + [f"t_{name}" for name in sorted_tag_names]
                 + [f"m_{name}" for name in sorted_metric_names]
             )
@@ -197,7 +243,9 @@ class FileSystemStore(Store):
                 writer.writerow(
                     [
                         solution.id,
-                        "FAILED" if solution.score is None else solution.score,
+                        "failed" if solution.score is None else solution.score,
+                        solution.started_at,
+                        solution.ended_at,
                     ]
                     + [solution.tags.get(name) for name in sorted_tag_names]
                     + [solution.metrics.get(name) for name in sorted_metric_names]

@@ -7,9 +7,8 @@ than the incumbent — which is exactly the move the loop relies on to escape lo
 optima. Making the check a tool rather than a command is part of that: the
 evaluator's path never appears, so `score` is not one word away from `validate`.
 
-Requires the `agent` extra: `pip install optiverse[agent]`. mini-swe-agent is
-imported inside the methods that use it, so `import optiverse` stays
-dependency-free.
+mini-swe-agent is imported inside the methods that use it, so `import optiverse`
+stays dependency-free.
 
 mini-swe-agent annotates several signatures with bare `dict`, which strict mode
 reports as partially unknown. That looseness is in the dependency, not here, so
@@ -20,10 +19,10 @@ it is suppressed for this file only.
 
 import logging
 import os
-from dataclasses import dataclass
 from typing import Any, Dict, Optional, Set, cast
 
 from .. import codebase as codebase_helpers
+from .._mini_swe_agent import AgentLimits, normalize_exit_status
 from ..generator import GenerationContext, GenerationResult, Generator
 
 logger = logging.getLogger(__name__)
@@ -32,11 +31,6 @@ logger = logging.getLogger(__name__)
 _UNPRICED_MODELS: Set[str] = set()
 
 MODEL_VARIABLE = "OPTIVERSE_MODEL"
-
-DEFAULT_STEP_LIMIT = 40
-DEFAULT_COST_LIMIT = 0.0
-DEFAULT_WALL_TIME_LIMIT_SECONDS = 900
-DEFAULT_COMMAND_TIMEOUT_SECONDS = 180
 
 INSTANCE_TEMPLATE = """{{task}}
 
@@ -107,22 +101,6 @@ nl -ba filename.py | sed -n '10,20p'
 """
 
 
-@dataclass(frozen=True)
-class AgentLimits:
-    """Bounds on one generation. All are enforced by mini-swe-agent itself.
-
-    `cost_limit` is off by default: mini-swe-agent reads 0 as "no limit". Spend is
-    still recorded per candidate as `m_agent_cost_usd`, so it is observable
-    without being throttled. The bounds that always hold are the step and
-    wall-time limits.
-    """
-
-    step_limit: int = DEFAULT_STEP_LIMIT
-    cost_limit: float = DEFAULT_COST_LIMIT
-    wall_time_limit_seconds: int = DEFAULT_WALL_TIME_LIMIT_SECONDS
-    command_timeout_seconds: int = DEFAULT_COMMAND_TIMEOUT_SECONDS
-
-
 class AgentGenerator(Generator):
     def __init__(
         self,
@@ -148,33 +126,13 @@ class AgentGenerator(Generator):
 
         return cls(model_name=model_name, limits=limits)
 
-    def build_model(self) -> Any:
-        """The model layer, matched to the templates the agent is given.
-
-        Text-based rather than tool-calling: both templates `generate` renders
-        describe the ```mswea_bash_command fence, which is what this class's
-        `action_regex` parses. The tool-calling class would reject those replies
-        as format errors, and would also rule out every model without tool
-        support.
-
-        `cost_tracking="ignore_errors"` because mini-swe-agent otherwise raises
-        when litellm cannot price a model — outside its own retry loop, losing the
-        whole iteration. A missing price is not a reason to discard a candidate.
-        """
-        # Imported here so the core stays importable without the agent extra.
-        from ._mini_swe_agent import RateLimitAwareModel
-
-        return RateLimitAwareModel(
-            model_name=self._model_name,
-            model_kwargs={"drop_params": True},
-            cost_tracking="ignore_errors",
-        )
-
     def generate(self, context: GenerationContext) -> GenerationResult:
+        # Imported here so the core stays importable without mini-swe-agent.
         from minisweagent.agents.default import DefaultAgent
 
-        from ._mini_swe_agent import (
+        from .._mini_swe_agent import (
             ValidateTerminatesEnvironment,
+            build_model,
             default_agent_config,
         )
 
@@ -191,7 +149,7 @@ class AgentGenerator(Generator):
         agent_config = default_agent_config()
 
         agent = DefaultAgent(
-            self.build_model(),
+            build_model(self._model_name),
             environment,
             system_template=cast(str, agent_config["system_template"]),
             instance_template=INSTANCE_TEMPLATE,
@@ -244,6 +202,6 @@ class AgentGenerator(Generator):
             logger.warning(
                 f"Agent failed on {context.codebase}: {error}", exc_info=True
             )
-            return f"Error:{type(error).__name__}"
+            return normalize_exit_status(f"error:{type(error).__name__}")
 
-        return str(outcome.get("exit_status", "Unknown"))
+        return normalize_exit_status(str(outcome.get("exit_status", "unknown")))

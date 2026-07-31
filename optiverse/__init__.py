@@ -1,7 +1,8 @@
 """Optiverse: evolve codebases with coding agents.
 
-The core imports nothing outside the standard library. Generators that need a
-third-party agent live in `optiverse.generators` and are imported explicitly.
+The core imports nothing outside the standard library. The two things that drive
+a coding agent — `optiverse.generators`, which writes candidates, and
+`optiverse.strategists`, which decides what to try next — are imported explicitly.
 """
 
 from . import codebase
@@ -11,8 +12,9 @@ from . import evaluator_main
 from . import generator
 from . import optimizer
 from . import prompt_generator
-from . import search_strategies
+from . import search
 from . import store
+from . import strategist
 
 __all__ = [
     "codebase",
@@ -22,6 +24,7 @@ __all__ = [
     "generator",
     "optimizer",
     "prompt_generator",
-    "search_strategies",
+    "search",
     "store",
+    "strategist",
 ]

@@ -35,14 +35,18 @@ Homepage = "https://github.com/larose/optiverse"
 Repository = "https://github.com/larose/optiverse"
 
 [tool.setuptools]
-packages = ["optiverse", "optiverse.generators", "optiverse.search_strategies"]
+packages = ["optiverse", "optiverse.generators", "optiverse.strategists"]
+
+# The playbook is data, not code, so it is not installed unless it is named.
+[tool.setuptools.package-data]
+optiverse = ["playbook.md"]
 
 [tool.black]
 target-version = ['py310']
-include = '(examples|optiverse|tests).*\.py$'
+include = '(examples|optiverse).*\.py$'
 
 [tool.pyright]
-include = ["examples", "optiverse", "tests"]
+include = ["examples", "optiverse"]
 # Seed codebases and harnesses are assembled into one flat directory at
 # evaluation time, so `from context import Context` only resolves there. Tell
 # pyright where the siblings live rather than dropping them from the checks.

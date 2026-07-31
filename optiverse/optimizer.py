@@ -1,16 +1,15 @@
-import json
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, cast
+from typing import Dict, Union, cast
 
 from . import codebase as codebase_helpers
 from .config import OptimizerConfig
 from .evaluator import SCORE, EvaluatorError, ScoreResult
 from .generator import GenerationContext, GenerationResult
 from .prompt_generator import DefaultPromptGenerator, PromptGeneratorContext
-from .search_strategies import SearchContext, SearchResult
+from .search import Search, SearchResult
 from .store import CODE_DIRECTORY_NAME, FileSystemStore, Solution
 
 logger = logging.getLogger(__name__)
@@ -26,27 +25,33 @@ class Optimizer:
         self._prompt_generator = DefaultPromptGenerator()
         self._evaluator = config.problem.evaluator()
         self._generator = config.generator
-        self._search_strategy = config.search_strategy
-        self._checkpoint_file = Path(config.directory) / "checkpoint.json"
+        self._search = Search(
+            directory=config.directory,
+            playbook=config.playbook,
+            store=self._store,
+            strategist=config.strategist,
+        )
 
     def _do_iteration(self, iteration: int) -> None:
-        strategy_result = self._search_strategy.apply(
-            context=SearchContext(iteration=iteration, store=self._store)
+        search_result = self._search.decide(
+            iteration=iteration,
+            problem_description=self._config.problem.description,
         )
 
         # Allocate first, so the agent works directly in the solution's final
         # home. There is no scratch directory and nothing to copy back.
+        started_at = datetime.now().isoformat(timespec="seconds")
         solution_id = self._store.allocate()
         codebase = self._store.codebase_path(solution_id)
 
         # Before the prompt, which names the copies.
-        references_directory = self._copy_references(strategy_result, solution_id)
+        references_directory = self._copy_references(search_result, solution_id)
 
         prompt = self._prompt_generator.generate(
             PromptGeneratorContext(
                 problem=self._config.problem,
-                strategy_result=strategy_result,
                 references_directory=os.path.relpath(references_directory, codebase),
+                search_result=search_result,
             )
         )
 
@@ -62,24 +67,23 @@ class Optimizer:
 
         score_result = self._score(codebase)
 
-        tags = self._tags(strategy_result, generation_result)
-
-        self._store.commit(
+        solution = self._store.commit(
             solution_id,
             is_initial=False,
             metrics={**score_result.metrics, **generation_result.metrics},
             score=score_result.score,
-            tags=tags,
+            started_at=started_at,
+            tags=self._tags(search_result, generation_result),
         )
 
-        self._search_strategy.result(iteration=iteration, score=score_result.score)
+        self._search.record(iteration=iteration, solution=solution)
 
         if score_result.score is None:
             logger.info(f"Saved unscoreable solution {solution_id} for inspection")
         else:
             logger.info(f"Saved solution {solution_id}, score: {score_result.score}")
 
-    def _copy_references(self, strategy_result: SearchResult, solution_id: str) -> Path:
+    def _copy_references(self, search_result: SearchResult, solution_id: str) -> Path:
         """Give the agent its own copy of every parent, named by solution id.
 
         Copies rather than paths into the population: the agent can then read,
@@ -90,7 +94,7 @@ class Optimizer:
         references_directory = self._store.references_path(solution_id)
         references_directory.mkdir(parents=True, exist_ok=True)
 
-        for solution_with_title in strategy_result.solutions:
+        for solution_with_title in search_result.solutions:
             solution = solution_with_title.solution
             reference = references_directory / solution.id
 
@@ -102,18 +106,16 @@ class Optimizer:
         return references_directory
 
     def _tags(
-        self, strategy_result: SearchResult, generation_result: GenerationResult
+        self, search_result: SearchResult, generation_result: GenerationResult
     ) -> Dict[str, Union[int, str]]:
-        tags: Dict[str, Union[int, str]] = {
-            **strategy_result.tags,
-            **generation_result.tags,
-        }
+        """What describes this solution, and nothing about how it was chosen.
 
-        for index, solution_with_title in enumerate(strategy_result.solutions, 1):
-            tags[f"parent_id_{index}"] = solution_with_title.solution.id
-            tags[f"parent_title_{index}"] = solution_with_title.title
-
-        return tags
+        Lineage and the branch it was built under are the journal's business:
+        they are recorded there per iteration, in full, and duplicating them here
+        cost six columns of solutions.csv without answering anything the join
+        cannot.
+        """
+        return {**search_result.tags, **generation_result.tags}
 
     def _score(self, codebase: Path) -> ScoreResult:
         """Score a candidate, treating a broken evaluator as unscoreable.
@@ -139,62 +141,10 @@ class Optimizer:
 
         return result
 
-    def _save_checkpoint(self, iteration: int) -> None:
-        checkpoint_data = {
-            "iteration": iteration,
-            "search_strategy_state": self._search_strategy.serialize(),
-            "metadata": {
-                "timestamp": datetime.now().isoformat(),
-                "search_strategy_class": self._search_strategy.__class__.__name__,
-            },
-        }
-
-        with open(self._checkpoint_file, "w") as f:
-            json.dump(checkpoint_data, f, indent=2)
-
-    def _save_checkpoint_safely(self, iteration: int) -> None:
-        try:
-            self._save_checkpoint(iteration)
-        except Exception as e:
-            logger.warning(
-                f"Failed to save checkpoint at iteration {iteration}: {e}",
-                exc_info=True,
-            )
-
-    def _load_checkpoint(self) -> Optional[Dict[str, Any]]:
-        if not self._checkpoint_file.exists():
-            return None
-
-        with open(self._checkpoint_file, "r") as f:
-            checkpoint_data = cast(Dict[str, Any], json.load(f))
-
-        required_keys = ["iteration", "search_strategy_state", "metadata"]
-        if not all(key in checkpoint_data for key in required_keys):
-            raise ValueError("Invalid checkpoint format")
-
-        expected_class = self._search_strategy.__class__.__name__
-        actual_class = cast(Dict[str, Any], checkpoint_data["metadata"]).get(
-            "search_strategy_class"
-        )
-        if actual_class != expected_class:
-            raise ValueError(
-                f"Search strategy class mismatch: expected {expected_class}, "
-                f"got {actual_class}"
-            )
-
-        return checkpoint_data
-
-    def _restore_from_checkpoint(self, checkpoint: Dict[str, Any]) -> int:
-        self._search_strategy.deserialize(
-            cast(Dict[str, Any], checkpoint["search_strategy_state"])
-        )
-        iteration = cast(int, checkpoint["iteration"])
-        logger.info(f"Resuming from checkpoint at iteration {iteration + 1}")
-        return iteration
-
     def _initialize_fresh_optimization(self) -> None:
         logger.info("Evaluating and saving initial solution...")
 
+        started_at = datetime.now().isoformat(timespec="seconds")
         solution_id = self._store.allocate()
         codebase = self._store.codebase_path(solution_id)
         codebase_helpers.materialize(self._config.problem.initial_codebase, codebase)
@@ -206,6 +156,7 @@ class Optimizer:
             is_initial=True,
             metrics=score_result.metrics,
             score=score_result.score,
+            started_at=started_at,
             tags={},
         )
 
@@ -215,19 +166,29 @@ class Optimizer:
         )
 
     def run(self) -> None:
-        checkpoint = self._load_checkpoint()
+        """Run until the iteration budget is spent, resuming if there is a run here.
 
-        if checkpoint is not None:
-            start_iteration = self._restore_from_checkpoint(checkpoint)
-        else:
+        Where to resume is the journal's length: it has one line per finished
+        iteration, so there is no checkpoint file that could disagree with it, and
+        an iteration that died partway through is simply re-run rather than
+        skipped or repeated.
+
+        Iterations are numbered from 1, and it is the loop that counts that way
+        rather than each place the number is displayed. The same value reaches the
+        console, the strategist's log filename and the journal, so there is no
+        `+ 1` left to forget at a new call site. Counting journal lines still
+        works: a count does not care what the entries are numbered.
+        """
+        completed = self._search.completed_iterations()
+
+        if completed == 0 and not self._store.get_all_solutions():
             logger.info("Starting fresh optimization...")
             self._initialize_fresh_optimization()
-            start_iteration = 0
+        elif completed > 0:
+            logger.info(f"Resuming after {completed} completed iterations")
 
-        for iteration in range(start_iteration, self._config.max_iterations):
-            logger.info(
-                f"Starting iteration {iteration + 1}/{self._config.max_iterations}"
-            )
+        for iteration in range(completed + 1, self._config.max_iterations + 1):
+            logger.info(f"Starting iteration {iteration}/{self._config.max_iterations}")
 
             try:
                 self._do_iteration(iteration=iteration)
@@ -236,8 +197,6 @@ class Optimizer:
                     f"Iteration {iteration} failed with error: {e}", exc_info=True
                 )
                 continue
-
-            self._save_checkpoint_safely(iteration)
 
         self._report_best_solution()
 

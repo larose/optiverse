@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import List
 
 from .config import Problem
-from .search_strategies import SearchResult
+from .search import SearchResult
 
 OPENING = """You are one step of an automated search for a better solution to \
 the problem below.
@@ -32,7 +32,7 @@ better; you will not be told what yours was."""
 @dataclass(frozen=True)
 class PromptGeneratorContext:
     problem: Problem
-    strategy_result: SearchResult
+    search_result: SearchResult
 
     references_directory: str
     """Where the parent copies are, relative to the codebase the agent works in.
@@ -65,13 +65,13 @@ class DefaultPromptGenerator(PromptGenerator):
             *self._parents(context),
             "# Your task",
             "",
-            context.strategy_result.task.strip(),
+            context.search_result.task.strip(),
         ]
 
         return "\n".join(sections) + "\n"
 
     def _parents(self, context: PromptGeneratorContext) -> List[str]:
-        solutions = context.strategy_result.solutions
+        solutions = context.search_result.solutions
 
         if not solutions:
             return []
