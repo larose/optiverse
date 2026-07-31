@@ -150,8 +150,6 @@ class IteratedLocalSearch(SearchStrategy):
                 DiverseBestSolutionPerturbation(): 0.8,
                 InitialSolutionPerturbation(): 0.1,
             }
-        else:
-            perturbation_methods = perturbation_methods
 
         self._perturbation_methods = normalize_perturbation_weights(
             perturbation_methods

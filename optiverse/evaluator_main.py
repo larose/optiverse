@@ -5,7 +5,11 @@ this. It exists so a Python evaluator does not have to re-implement argv parsing
 and JSON framing:
 
     if __name__ == "__main__":
-        evaluator_main(score=score, validate=validate)
+        run(score=score, validate=validate)
+
+`run` is `evaluator_main` plus the `sys.exit`, which is what an evaluator run as a
+script wants; `evaluator_main` returns the exit code instead, for a caller that
+has its own idea of what to do with it.
 """
 
 import json
