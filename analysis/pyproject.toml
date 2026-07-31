@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "optiverse-analysis"
+version = "0.0.1"
+description = "Reports over an optiverse run directory"
+authors = [{ name = "Mathieu Larose", email = "mathieu@mathieularose.com" }]
+license = "GPL-3.0"
+requires-python = ">=3.10"
+# A separate distribution with a separate virtualenv, because optiverse itself
+# is deliberately dependency-free and plotting is not. Nothing in the search
+# loop imports this, so the core keeps costing nothing to install.
+dependencies = ["matplotlib==3.11.1", "optiverse"]
+
+[project.optional-dependencies]
+dev = ["black==25.1.0", "pyright==1.1.403"]
+
+[tool.setuptools]
+packages = ["optiverse_analysis"]
+
+[tool.black]
+target-version = ['py310']
+
+[tool.pyright]
+include = ["optiverse_analysis", "tests"]
+# matplotlib ships its own stubs, so pyright has to be told where this
+# subproject's virtualenv is or every call into it is an unknown type.
+venvPath = "."
+venv = "venv"
+# Both packages are installed editable, and pyright cannot follow the
+# `__editable__` finder setuptools leaves behind. Point it at the checkout.
+extraPaths = [".."]
+pythonVersion = "3.10"
+typeCheckingMode = "strict"
+reportMissingImports = true
+reportUnusedImport = true
+reportUnusedVariable = true
+# Every matplotlib method that takes styling keywords is typed `**kwargs: Any`
+# in its own stubs, so strict mode calls all of them partially unknown. The rule
+# fires on the library, never on anything here; the rest of strict stays on.
+reportUnknownMemberType = false
