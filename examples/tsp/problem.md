@@ -1,25 +1,39 @@
-Implement a heuristic solver for the Traveling Salesman Problem (TSP) in Python by completing the `solve` function below. Your goal is to find the shortest possible tour within the given time limit.
+Implement a heuristic solver for the Traveling Salesman Problem (TSP) in Python. Your goal is to find the shortest possible tour within the given time limit.
 
-## Requirements
+## Your codebase
 
-Define a `solve` function with the following signature:
+Your codebase is a directory. It must contain `solver.py` at its root, defining:
 
-```
+```python
 def solve(context: Context) -> None:
     ...
 ```
 
-Define any helper functions at the top level (do not nest functions).
+You may add as many further Python modules alongside it as you like and import them from `solver.py`. Define every function at the top level; do not nest functions.
 
-Do not modify the `Context` class or its interface.
+Nothing else is in your codebase. `context.py` and the code that runs your solver belong to the evaluator and are not yours to see or change. The `Context` interface below is the whole of what you get.
+
+## How your solver is run
+
+Something imports `solve` from your `solver.py`, builds a `Context` around one problem instance and a time limit, and calls `solve` exactly once. Your answer is the last tour you reported before the limit expired; tours reported after it are ignored. Start `solver.py` with:
+
+```python
+from context import Context
+```
+
+You cannot run your solver yourself. `validate` is the only thing you can execute: it answers valid or invalid and prints diagnostics. It never tells you a tour length, a running time, or a score.
+
+## Requirements
 
 Submit only valid tours that visit each city exactly once and form a closed loop.
 
-Ensure that solutions are reported before the time limit expires. Solutions reported after the time limit will be ignored.
+Call `context.report_new_best_solution(solution)` only when a better solution is found, to minimise overhead.
+
+Ensure that solutions are reported before the time limit expires. A solver that keeps working past the limit is killed and scores nothing.
 
 Use only the Python Standard Library; external packages are not allowed.
 
-Call `context.report_new_best_solution(solution)` only when a better solution is found to minimise overhead.
+You are scored on instances you have never seen, so do not tune for one particular instance, and do not try to carry state from one run to the next.
 
 ## `Context` Interface
 
@@ -50,4 +64,4 @@ class Context:
 
 ## Evaluation Criteria
 
-Your score is the total length of the last valid tour submitted before the time limit.
+Your score is the average length of the tours you produce, over several runs. Lower is better.

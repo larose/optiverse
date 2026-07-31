@@ -6,6 +6,41 @@ The Traveling Salesman Problem (TSP) can be described as follows: given a list o
 
 See [problem.md](problem.md) for the complete problem description and requirements.
 
+## Layout
+
+- [optimize.py](optimize.py) — starts an optimization run. `make run.tsp` runs it.
+- [initial/](initial/) — the seed codebase: a `solver.py` that returns one random tour. The first solution is a copy of this, and every later one descends from it.
+- [harness/](harness/) — everything the example owns for measuring. Never copied into a codebase and never visible to an agent.
+  - `evaluate.py` — the evaluator command, and the only thing here anyone else calls. `score` averages three 30-second runs; `validate` does one 3-second run plus the no-nested-functions check that [problem.md](problem.md) requires, which is enough to answer "does this run and produce a legal tour" without spending the full budget.
+  - `run.py` — runs one solver against one instance, once.
+  - `context.py` — what `solve` is handed.
+  - `instance.py` — parses a TSPLIB file, and measures a tour.
+  - `a280.tsp` — the scoring instance. It lives here and nowhere else, so a candidate never sees the coordinates while it is being written.
+
+The agent has no way to run any of it. It writes code and calls `validate`, which
+answers valid or invalid with diagnostics and nothing more.
+
+## How a candidate is measured
+
+`evaluate.py` builds a workspace per run and deletes it afterwards:
+
+```
+workspace/
+  run.py  context.py  instance.py  a280.tsp    <- from harness/
+  candidate/                                   <- the codebase, verbatim
+```
+
+The candidate sits one level down, and `run.py` **appends** it to `sys.path`.
+Appended, it loses every name collision: `import datetime` finds the standard
+library, `import context` finds the harness's, and only `import solver` resolves
+in the candidate. So a codebase can hold arbitrary files without any of them
+shadowing the harness, and nothing has to be overwritten or forbidden.
+
+`run.py` writes out the tour and computes nothing. `evaluate.py` checks it is a
+legal tour and measures its length itself, in a process the candidate cannot
+reach — a candidate chooses which tour it submits, but not what that tour is
+worth.
+
 ## Heuristic Discovered by Optiverse
 
 After approximately 300 iterations, using Qwen3-235B-A22B as the LLM, Optiverse produced a heuristic based on Iterated Local Search (ILS). It includes:

@@ -1,0 +1,4 @@
+# Benchmark dataset. Fetch and convert both with dataset.py.
+ts.txt
+ts.bin
+ts.bin.tmp
