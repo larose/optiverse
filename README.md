@@ -1,54 +1,47 @@
 # Optiverse
 
-Optiverse searches for better code. You give it a seed codebase, a description
-of the problem, and a command that measures a candidate. It evolves a population
-of solutions, each one written by a coding agent and ranked by your evaluator.
+Optiverse is an optimizer, and its search space is code. You write an evaluator
+that scores a codebase (objective function), give it something that works to
+start from (initial solution), and it searches for a codebase that scores better
+(search strategy).
 
-The unit of evolution is a **directory**, so a candidate can restructure a whole
-package rather than fill in a marked region. The measurement is a **process**,
-so the evolved code can be in any language, and what counts as better is decided
-by a program you wrote.
+For example, the [traveling salesman problem](https://en.wikipedia.org/wiki/Travelling_salesman_problem)
+is to find the shortest tour that visits every city once. Your evaluator scores
+a solver by the average length of the tours it produces, and you start from a
+solver that returns a random tour.
+
+A candidate is a directory of source files, in any language. Your evaluator is
+any executable.
 
 ## Where this comes from
 
 DeepMind's [AlphaEvolve](https://deepmind.google/discover/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)
 established the premise: an LLM inside an evolutionary loop reaches algorithms
-that neither the model alone nor the search alone finds. Optiverse takes that
-premise and gives the writing of each candidate to a coding agent with a shell,
-and the judging of it to an ordinary program of your own.
+that neither the model alone nor the search alone finds. In Optiverse, a coding
+agent with a shell writes each candidate, rather than a model editing regions
+marked inside a file.
 
-## What the design commits to
+## How it works
 
-**A solution is a directory.** The thing being improved is a package, so nothing
-has to be marked as evolvable and any file in it can be added, rewritten or
+**A solution is a directory.** Any file in it can be added, rewritten or
 deleted.
 
-**The evaluator is the spec.** It is a command, in any language, and the only
-thing that ever measures anything. This is where the real difficulty of the
-method lives.
+**The evaluator is the objective.** Nothing else measures a candidate, not the
+agent that wrote it and not the model behind it.
 
-**Everything is a plain file.** Solutions, lineage, agent trajectories and the
-checkpoint all live under one run directory, so a run is resumable and
-inspectable with the tools you already have.
-
-## How an iteration works
+Each iteration:
 
 1. The search strategy picks parent solutions and decides whether to exploit or
-   diversify.
+   diversify. The default is an iterated local search, which improves on the
+   best solution so far and restarts or recombines when that stops paying off.
 2. An agent writes a new candidate, with the parents and their scores available
    to read. It checks itself with `validate`, and its turn ends the moment that
    passes on code it changed.
 3. Optiverse scores the result and records it with its metrics and lineage.
 
-The agent is told whether its code is **valid**, never how it **scores**. It can
-read its parents' scores but has no way to measure its own work, because an
-agent that could rank itself would abandon a novel approach as soon as it looked
-worse than the incumbent, which is the very move that escapes a local optimum.
-
 ## Quick start
 
-Requirements: Python 3.10 or newer. The integer compression example also needs a
-Go toolchain and downloads about 1.6 GB of benchmark data; TSP needs neither.
+Requires Python 3.10 or newer.
 
 ```bash
 pip install optiverse
@@ -66,8 +59,8 @@ source venv/bin/activate
 ### Choosing a model
 
 Model access goes through [LiteLLM](https://github.com/BerriAI/litellm), so set
-`OPTIVERSE_MODEL` to a [LiteLLM model name](https://docs.litellm.ai/docs/providers)
-such as `gemini/gemini-3.6-flash`, `anthropic/claude-sonnet-5` or `ollama/qwen3`.
+`OPTIVERSE_MODEL` to a LiteLLM model name such as `gemini/gemini-3.6-flash`,
+`anthropic/claude-sonnet-5` or `ollama/qwen3`.
 
 Credentials are your provider's own environment variables, set as that provider
 documents them (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_API_BASE`).
@@ -85,9 +78,6 @@ INFO - Saved solution cacfb3eb073849a5a6cc8fba90766a68, score: 2840.077573031101
 INFO - Starting iteration 2/100
 INFO - Saved solution a037326a1b3740098ea928789675a80d, score: 2678.5583501149986
 ```
-
-Iterations are bounded by a step limit and a wall-clock limit, but **not** by
-cost, so check what the first few cost before leaving a long run unattended.
 
 ## What comes out of a run
 
@@ -176,19 +166,6 @@ from optiverse.evaluator_main import run
 if __name__ == "__main__":
     run(score=score, validate=validate)
 ```
-
-### Making an evaluator hard to cheat
-
-Put the candidate in a **subdirectory** of a temporary workspace, with your
-harness at the root, so it cannot stand in for part of your harness whatever it
-names its files. Blocklisting names only covers the ones you thought of.
-
-Then be deliberate about what the candidate's own process is trusted to report.
-If the objective is something you can recompute, such as a tour length or a
-compressed size, take the artifact and measure it yourself. The
-[integer compression example](examples/integer_compression/README.md) works
-through a case where that is not possible and documents which holes it left
-open.
 
 ## Examples
 
