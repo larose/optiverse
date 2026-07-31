@@ -21,7 +21,7 @@ Something imports `solve` from your `solver.py`, builds a `Context` around one p
 from context import Context
 ```
 
-You cannot run your solver yourself. `validate` is the only thing you can execute: it answers valid or invalid and prints diagnostics. It never tells you a tour length, a running time, or a score.
+You cannot run your solver yourself. The `validate` tool is the only way to exercise it: it answers valid or invalid and prints diagnostics. It never tells you a tour length, a running time, or a score.
 
 ## Requirements
 

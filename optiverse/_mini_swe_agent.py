@@ -12,6 +12,7 @@ is suppressed for this file only.
 
 # pyright: reportUnknownMemberType=false, reportUnknownArgumentType=false
 
+import json
 import logging
 import re
 import time
@@ -20,12 +21,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, cast
 
 import litellm
-import yaml
-from minisweagent import package_dir
 from minisweagent.environments.local import LocalEnvironment
-from minisweagent.exceptions import Submitted
+from minisweagent.exceptions import FormatError, Submitted
 from minisweagent.models.litellm_model import LitellmModel
-from minisweagent.models.litellm_textbased_model import LitellmTextbasedModel
+from minisweagent.models.utils.actions_toolcall import BASH_TOOL
 
 from . import codebase as codebase_helpers
 from .evaluator import EvaluatorError, ValidationResult
@@ -34,17 +33,45 @@ logger = logging.getLogger(__name__)
 
 VALIDATED_EXIT_STATUS = "validated"
 
-# The one word the agent types instead of a command. Never reaches a shell.
-VALIDATE_COMMAND = "validate"
+# The two tools the agent is given. `bash` is mini-swe-agent's own. `validate` is
+# ours, and it is a real tool rather than a word smuggled into a bash command
+# because a model given nowhere to put it puts it in the shell, where there is no
+# such program.
+BASH_TOOL_NAME = "bash"
+VALIDATE_TOOL_NAME = "validate"
+
+VALIDATE_TOOL: Dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": VALIDATE_TOOL_NAME,
+        "description": (
+            "Check your work. Answers valid or invalid and prints diagnostics; "
+            "it says nothing about how good the result is. Your turn ends the "
+            "moment it reports valid on something you changed."
+        ),
+        # It takes none, and the schema is the place to say so.
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+}
+
+# mini-swe-agent's own system template describes the ```mswea_bash_command fence
+# its text-based model layer parses out of prose. There is no fence here: the
+# form of an action is in the tool schema rather than in the prompt.
+SYSTEM_TEMPLATE = """You are a helpful assistant that can interact with a computer.
+
+Act by calling a tool. Explain your reasoning before each call.
+"""
+
+# Worded here rather than through `format_error_template`, whose default relays
+# mini-swe-agent's own bash-only phrasing to a model that has two tools.
+FORMAT_ERROR_NOTICE = (
+    "Every response must call a tool: `bash` to run a command, or `validate` to "
+    "check your work."
+)
 
 UNCHANGED_NOTICE = (
     "\n[optiverse] This solution is valid, but it is byte-for-byte identical to "
     "the one you started from. Make a real change before checking again."
-)
-
-ARGUMENTS_NOTICE = (
-    f"[optiverse] `{VALIDATE_COMMAND}` is a tool, not a program. Write it on its "
-    "own, with no arguments, no path and no redirection."
 )
 
 EVALUATOR_FAILED_NOTICE = (
@@ -88,29 +115,18 @@ class AgentLimits:
     command_timeout_seconds: int = DEFAULT_COMMAND_TIMEOUT_SECONDS
 
 
-def default_agent_config() -> Dict[str, Any]:
-    """The `agent` section of mini-swe-agent's shipped default config.
-
-    Reused for `system_template`, which encodes the action format that the model
-    layer parses. Rewriting it would risk silent format errors.
-    """
-    raw = yaml.safe_load((package_dir / "config" / "default.yaml").read_text())
-    return cast(Dict[str, Any], cast(Dict[str, Any], raw)["agent"])
-
-
 def build_model(model_name: str) -> Any:
-    """The model layer, matched to the templates the agents are given.
+    """The model layer, which gives the agent its two tools.
 
-    Text-based rather than tool-calling: every template here describes the
-    ```mswea_bash_command fence, which is what this class's `action_regex` parses.
-    The tool-calling class would reject those replies as format errors, and would
-    also rule out every model without tool support.
+    Tool-calling rather than text-based, so `validate` is a tool the model calls
+    rather than a word it is asked to type into a shell that has no such program.
+    The cost of that is a model that cannot call tools, which this cannot use.
 
     `cost_tracking="ignore_errors"` because mini-swe-agent otherwise raises when
     litellm cannot price a model — outside its own retry loop, losing the whole
     iteration. A missing price is not a reason to discard a candidate.
     """
-    return RateLimitAwareModel(
+    return ToolCallingModel(
         model_name=model_name,
         model_kwargs={"drop_params": True},
         cost_tracking="ignore_errors",
@@ -186,15 +202,17 @@ def _header_delay(error: Exception) -> Optional[float]:
         return None
 
 
-class RateLimitAwareModel(LitellmTextbasedModel):
-    """Waits as long as the provider says, rather than guessing.
+class ToolCallingModel(LitellmModel):
+    """Offers both tools, and waits as long as the provider says.
 
-    mini-swe-agent retries on a fixed exponential ladder that never reads the
-    response, so against a stated 47-second delay it spends its first three
-    attempts on requests that cannot succeed, each one charged against the very
-    quota it is waiting for.
+    mini-swe-agent sends exactly one tool and its parser rejects every other
+    name, so a second tool means owning the request and the parse. Both are
+    overridden here; nothing else about the model layer changes.
 
-    Rate limits are handled here and only here: `RateLimitError` is added to the
+    On rate limits, mini-swe-agent retries on a fixed exponential ladder that
+    never reads the response, so against a stated 47-second delay it spends its
+    first three attempts on requests that cannot succeed, each one charged
+    against the very quota it is waiting for. `RateLimitError` is added to the
     abort list so the outer retry does not re-try what this loop already gave up
     on, which would otherwise multiply into dozens of requests.
     """
@@ -209,9 +227,20 @@ class RateLimitAwareModel(LitellmTextbasedModel):
         self._sleep = sleep
 
     def _query(self, messages: List[Dict[str, str]], **kwargs: Any) -> Any:
+        """The request, with both tools on it.
+
+        A full override rather than a `super()` call: the parent names `tools`
+        when it calls `litellm.completion`, so passing ours through `**kwargs`
+        would be two values for one argument.
+        """
         for waits in range(MAXIMUM_RATE_LIMIT_WAITS + 1):
             try:
-                return super()._query(messages, **kwargs)
+                return litellm.completion(
+                    model=self.config.model_name,
+                    messages=messages,
+                    tools=[BASH_TOOL, VALIDATE_TOOL],
+                    **(self.config.model_kwargs | kwargs),
+                )
             except litellm.exceptions.RateLimitError as error:
                 if waits == MAXIMUM_RATE_LIMIT_WAITS:
                     raise
@@ -250,14 +279,78 @@ class RateLimitAwareModel(LitellmTextbasedModel):
 
         return delay
 
+    def _parse_actions(self, response: Any) -> List[Dict[str, Any]]:
+        """Tool calls, keeping the name so the environment can dispatch on it.
+
+        mini-swe-agent's own parser drops the name and rejects anything but
+        `bash`, which is exactly the two things a second tool needs from it.
+
+        `command` is set on every action, including `validate`'s, because
+        `LocalEnvironment.execute` reads that key whatever the action turns out
+        to be.
+        """
+        tool_calls = cast(List[Any], response.choices[0].message.tool_calls or [])
+        actions: List[Dict[str, Any]] = []
+
+        for tool_call in tool_calls:
+            name = str(tool_call.function.name)
+
+            if name == VALIDATE_TOOL_NAME:
+                command = ""
+            elif name == BASH_TOOL_NAME:
+                command = _bash_command(tool_call)
+            else:
+                command = None
+
+            if command is None:
+                raise FormatError(_format_error())
+
+            actions.append(
+                {"tool": name, "command": command, "tool_call_id": tool_call.id}
+            )
+
+        if not actions:
+            raise FormatError(_format_error())
+
+        return actions
+
+
+def _bash_command(tool_call: Any) -> Optional[str]:
+    """The command out of a `bash` call, or None if it did not carry one."""
+    try:
+        arguments = json.loads(tool_call.function.arguments)
+    except ValueError:
+        return None
+
+    if not isinstance(arguments, dict):
+        return None
+
+    command = cast(Dict[str, Any], arguments).get("command")
+
+    return command if isinstance(command, str) else None
+
+
+def _format_error() -> Dict[str, Any]:
+    """A rejection shaped the way mini-swe-agent shapes one.
+
+    `extra` is not optional: the model layer records the call's cost and response
+    on it before re-raising, so that a reply the parser threw away is still
+    billed and still in the trajectory.
+    """
+    return {
+        "role": "user",
+        "content": FORMAT_ERROR_NOTICE,
+        "extra": {"interrupt_type": "FormatError"},
+    }
+
 
 class ValidateTerminatesEnvironment(LocalEnvironment):
-    """Adds a `validate` tool, and ends the agent's turn once it passes.
+    """Runs the `validate` tool, and ends the agent's turn once it passes.
 
-    `validate` is a word this class intercepts, not a program: it never reaches a
-    shell. So the evaluator's path is never in the prompt and `score` is not one
-    word away from `validate`, and recognising the check is string equality
-    rather than a guess about what a command line meant.
+    `validate` is answered here rather than by a program on the path, so the
+    evaluator's command is never anywhere the agent can read it and `score` is
+    not one word away from `validate`. Which action is the check is the tool's
+    name, not a guess about what a command line meant.
 
     Once the code is correct, further work belongs to the outer loop: continuing
     would let the agent hill-climb, which costs tokens and quietly undoes
@@ -290,15 +383,8 @@ class ValidateTerminatesEnvironment(LocalEnvironment):
     def execute(
         self, action: Dict[str, Any], cwd: str = "", *, timeout: int | None = None
     ) -> Dict[str, Any]:
-        command = str(action.get("command", "")).strip()
-
-        if command == VALIDATE_COMMAND:
+        if action.get("tool") == VALIDATE_TOOL_NAME:
             return self._run_validate()
-
-        if _names_validate(command):
-            # `validate .`, `./validate`, `validate | tail`. Saying so costs one
-            # line; letting bash answer `command not found` costs a whole step.
-            return _result(ARGUMENTS_NOTICE, returncode=1)
 
         return super().execute(action, cwd, timeout=timeout)
 
@@ -325,12 +411,6 @@ class ValidateTerminatesEnvironment(LocalEnvironment):
                 "extra": {"exit_status": VALIDATED_EXIT_STATUS, "submission": ""},
             }
         )
-
-
-def _names_validate(command: str) -> bool:
-    """Whether the agent was reaching for the tool but wrote something else."""
-    first_word = command.split(maxsplit=1)[0] if command.split() else ""
-    return first_word.lstrip("./") == VALIDATE_COMMAND
 
 
 def _result(output: str, *, returncode: int) -> Dict[str, Any]:

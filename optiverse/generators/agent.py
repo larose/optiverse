@@ -1,11 +1,12 @@
 """Generation by a coding agent, over mini-swe-agent.
 
-The agent is given a codebase directory and one tool, `validate`. It is never
-given the score: ranking candidates is the search loop's job, and an agent that
-could see the score would abandon a novel approach the moment it looked worse
-than the incumbent — which is exactly the move the loop relies on to escape local
-optima. Making the check a tool rather than a command is part of that: the
-evaluator's path never appears, so `score` is not one word away from `validate`.
+The agent is given a codebase directory and two tools, `bash` and `validate`. It
+is never given the score: ranking candidates is the search loop's job, and an
+agent that could see the score would abandon a novel approach the moment it
+looked worse than the incumbent — which is exactly the move the loop relies on to
+escape local optima. Answering `validate` ourselves rather than putting a program
+on the path is part of that: the evaluator's command never appears anywhere the
+agent can read it, so `score` is not one word away from `validate`.
 
 mini-swe-agent is imported inside the methods that use it, so `import optiverse`
 stays dependency-free.
@@ -36,14 +37,7 @@ INSTANCE_TEMPLATE = """{{task}}
 
 # Checking your work
 
-Run `validate` to check your solution:
-
-```mswea_bash_command
-validate
-```
-
-It is a tool, not a program: write it on its own, with no arguments and no path.
-It answers valid or invalid and prints diagnostics. **When it reports valid after
+Call the `validate` tool to check your solution. **When it reports valid after
 you have changed something, your task ends immediately** — you do not need to
 submit anything.
 
@@ -56,48 +50,27 @@ this problem — there is no way to time or measure your own solution.
 - Leave no build artifacts, binaries or caches in your working directory. Build
   in a temporary directory if you need to.
 - Do not edit anything outside your working directory and the parent copies.
-
-# Response format
-
-You can execute bash commands. Every response must contain exactly one action.
-
-1. Every response must contain exactly one action
-2. The action must be enclosed in triple backticks
-3. Directory or environment variable changes are not persistent. Every action is
-   executed in a new subshell, starting in your working directory. However, you
-   can prefix any action with `MY_ENV_VAR=MY_VALUE cd /path/to/dir && ...`
-4. If you get stuck and cannot produce a valid solution, issue
-   `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` on its own to give up.
+- Directory and environment variable changes are not persistent. Every `bash`
+  call runs in a new subshell, starting in your working directory. Prefix a call
+  with `MY_ENV_VAR=MY_VALUE cd /path/to/dir && ...` if you need either to stick.
+- If you get stuck and cannot produce a valid solution, run
+  `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` on its own to give up.
 
 <system_information>
 {{system}} {{release}} {{version}} {{machine}}
 </system_information>
 
-## Formatting your response
+# Useful commands
 
-<example_response>
-THOUGHT: I need to understand the current solution first.
+Create a file:
 
-```mswea_bash_command
-ls -la
-```
-</example_response>
+    cat <<'EOF' > newfile.py
+    hello = "world"
+    EOF
 
-## Useful command examples
+View part of one:
 
-### Create a new file:
-
-```mswea_bash_command
-cat <<'EOF' > newfile.py
-hello = "world"
-EOF
-```
-
-### View file content:
-
-```mswea_bash_command
-nl -ba filename.py | sed -n '10,20p'
-```
+    nl -ba filename.py | sed -n '10,20p'
 """
 
 
@@ -131,9 +104,9 @@ class AgentGenerator(Generator):
         from minisweagent.agents.default import DefaultAgent
 
         from .._mini_swe_agent import (
+            SYSTEM_TEMPLATE,
             ValidateTerminatesEnvironment,
             build_model,
-            default_agent_config,
         )
 
         baseline_digest = codebase_helpers.digest(context.codebase)
@@ -146,12 +119,10 @@ class AgentGenerator(Generator):
             timeout=self._limits.command_timeout_seconds,
         )
 
-        agent_config = default_agent_config()
-
         agent = DefaultAgent(
             build_model(self._model_name),
             environment,
-            system_template=cast(str, agent_config["system_template"]),
+            system_template=SYSTEM_TEMPLATE,
             instance_template=INSTANCE_TEMPLATE,
             step_limit=self._limits.step_limit,
             cost_limit=self._limits.cost_limit,

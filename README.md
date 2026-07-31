@@ -40,8 +40,8 @@ Each iteration:
    approach. The list *is* the branch, so going deeper means adding a constraint
    and changing your mind means dropping back to a subset.
 2. A coding agent writes a new candidate under those constraints, with the chosen
-   parents and their scores available to read. It checks itself with `validate`,
-   and its turn ends the moment that passes on code it changed.
+   parents and their scores available to read. It has two tools, `bash` and
+   `validate`, and its turn ends the moment `validate` passes on code it changed.
 3. Optiverse scores the result and appends the iteration to the journal — the
    plan and its outcome on one line.
 
@@ -71,6 +71,9 @@ source venv/bin/activate
 Model access goes through [LiteLLM](https://github.com/BerriAI/litellm), so set
 `OPTIVERSE_MODEL` to a LiteLLM model name such as `gemini/gemini-3.6-flash`,
 `anthropic/claude-sonnet-5` or `ollama/qwen3`.
+
+The model must support tool calling. Both agents act by calling `bash` and
+`validate`, so a model without it cannot drive either one.
 
 Credentials are your provider's own environment variables, set as that provider
 documents them (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_API_BASE`).

@@ -49,16 +49,10 @@ INSTANCE_TEMPLATE = """{{task}}
 
 # Checking your work
 
-Run `validate` to check the plan you have written:
-
-```mswea_bash_command
-validate
-```
-
-It is a tool, not a program: write it on its own, with no arguments and no path.
-It reports what is wrong with `plan.json` and `knowledge.md`, or nothing if they
-are fine. **When it reports valid after you have changed something, your task
-ends immediately** — you do not need to submit anything.
+Call the `validate` tool to check the plan you have written. It reports what is
+wrong with `plan.json` and `knowledge.md`, or nothing if they are fine. **When it
+reports valid after you have changed something, your task ends immediately** —
+you do not need to submit anything.
 
 # Rules
 
@@ -67,48 +61,30 @@ ends immediately** — you do not need to submit anything.
 - Copy constraint text; do not retype it. A branch is identified by its exact
   constraint strings, so a reworded one silently starts a new branch. To continue
   an existing branch, lift its constraints out of `journal.jsonl` with a script.
-
-# Response format
-
-You can execute bash commands. Every response must contain exactly one action.
-
-1. Every response must contain exactly one action
-2. The action must be enclosed in triple backticks
-3. Directory or environment variable changes are not persistent. Every action is
-   executed in a new subshell, starting in your working directory. However, you
-   can prefix any action with `MY_ENV_VAR=MY_VALUE cd /path/to/dir && ...`
-4. If you get stuck and cannot produce a valid plan, issue
-   `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` on its own to give up.
+- Directory and environment variable changes are not persistent. Every `bash`
+  call runs in a new subshell, starting in your working directory.
+- If you get stuck and cannot produce a valid plan, run
+  `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` on its own to give up.
 
 <system_information>
 {{system}} {{release}} {{version}} {{machine}}
 </system_information>
 
-## Formatting your response
+# Useful commands
 
-<example_response>
-THOUGHT: I should see what the best candidate actually does before deciding.
+Read what the best candidate actually does:
 
-```mswea_bash_command
-cat ../solutions/851621dd*/code/*.go
-```
-</example_response>
+    cat ../solutions/851621dd*/code/*.go
 
-## Useful command examples
+Write the plan:
 
-### Write the plan:
+    cat <<'EOF' > plan.json
+    {"constraints": [], "parent_solution_ids": [], "task": "..."}
+    EOF
 
-```mswea_bash_command
-cat <<'EOF' > plan.json
-{"constraints": [], "parent_solution_ids": [], "task": "..."}
-EOF
-```
+Read the last few iterations:
 
-### Read the last few iterations:
-
-```mswea_bash_command
-tail -n 3 journal.jsonl | python3 -m json.tool --json-lines
-```
+    tail -n 3 journal.jsonl | python3 -m json.tool --json-lines
 """
 
 
@@ -146,9 +122,9 @@ class AgentStrategist(Strategist):
         from minisweagent.agents.default import DefaultAgent
 
         from .._mini_swe_agent import (
+            SYSTEM_TEMPLATE,
             ValidateTerminatesEnvironment,
             build_model,
-            default_agent_config,
         )
 
         environment = ValidateTerminatesEnvironment(
@@ -159,8 +135,6 @@ class AgentStrategist(Strategist):
             validate=context.validate,
         )
 
-        agent_config = default_agent_config()
-
         agent = DefaultAgent(
             build_model(self._model_name),
             environment,
@@ -168,7 +142,7 @@ class AgentStrategist(Strategist):
             instance_template=INSTANCE_TEMPLATE,
             output_path=context.log_path,
             step_limit=self._limits.step_limit,
-            system_template=cast(str, agent_config["system_template"]),
+            system_template=SYSTEM_TEMPLATE,
             wall_time_limit_seconds=self._limits.wall_time_limit_seconds,
         )
 

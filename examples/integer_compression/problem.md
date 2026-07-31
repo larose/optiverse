@@ -32,7 +32,7 @@ Each run is a **fresh process**. Nothing survives from one to the next: no packa
 
 `Decompress` must reconstruct the values from the bytes it is given.
 
-You cannot build, run or time your code. `validate` is the only thing you can execute: it answers valid or invalid and prints diagnostics. It never tells you a decompression time, a compression ratio, or a score.
+You cannot build, run or time your code. The `validate` tool is the only way to exercise it: it answers valid or invalid and prints diagnostics. It never tells you a decompression time, a compression ratio, or a score.
 
 ## Requirements
 
