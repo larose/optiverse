@@ -20,7 +20,6 @@ Validation needs neither file, so an agent's inner loop never touches this.
 
 import gzip
 import struct
-import sys
 import urllib.request
 from pathlib import Path
 from typing import List
@@ -112,10 +111,16 @@ def convert(source: Path = TEXT_FILE, target: Path = BINARY_FILE) -> None:
 
 
 def main() -> None:
+    # Nothing to do once ts.bin exists, and checking here rather than inside
+    # download() is what lets ts.txt be deleted afterwards: it is 1.6 GB and
+    # only the conversion ever reads it.
+    if BINARY_FILE.exists():
+        print(f"{BINARY_FILE} already exists")
+        return
+
     download()
     convert()
 
 
 if __name__ == "__main__":
     main()
-    sys.exit(0)

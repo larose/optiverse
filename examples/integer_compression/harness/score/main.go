@@ -33,7 +33,6 @@ const readBufferSize = 1 << 20
 type measurements struct {
 	CompressionTimeMS   float64 `json:"compression_time_ms"`
 	DecompressionTimeMS float64 `json:"decompression_time_ms"`
-	ValueCount          int     `json:"value_count"`
 }
 
 func readValues(path string) ([]uint32, error) {
@@ -101,25 +100,24 @@ func verify(original, decompressed []uint32) error {
 	return nil
 }
 
-func write(path string, compressed []byte, measured measurements) error {
-	if err := os.WriteFile(path+".bin", compressed, 0o644); err != nil {
-		return err
-	}
-
+func write(path string, measured measurements) error {
 	encoded, err := json.Marshal(measured)
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(path+".json", encoded, 0o644)
+	return os.WriteFile(path, encoded, 0o644)
 }
 
 func run() error {
 	instancePath := flag.String("instance", "", "dataset, raw little-endian uint32")
-	outputPrefix := flag.String("output", "", "prefix for <prefix>.bin and <prefix>.json")
+	outputPath := flag.String("output", "", "where to write the measurements, as JSON")
+	// Optional: the evaluator sizes these once per scoring, not once per run.
+	// Half a gigabyte through TMPDIR on every run costs more than it measures.
+	compressedPath := flag.String("compressed", "", "where to write the compressed bytes")
 	flag.Parse()
 
-	if *instancePath == "" || *outputPrefix == "" {
+	if *instancePath == "" || *outputPath == "" {
 		return fmt.Errorf("both -instance and -output are required")
 	}
 
@@ -140,10 +138,15 @@ func run() error {
 		return err
 	}
 
-	return write(*outputPrefix, compressed, measurements{
+	if *compressedPath != "" {
+		if err := os.WriteFile(*compressedPath, compressed, 0o644); err != nil {
+			return err
+		}
+	}
+
+	return write(*outputPath, measurements{
 		CompressionTimeMS:   float64(compressionTime.Nanoseconds()) / 1e6,
 		DecompressionTimeMS: float64(decompressionTime.Nanoseconds()) / 1e6,
-		ValueCount:          len(data),
 	})
 }
 

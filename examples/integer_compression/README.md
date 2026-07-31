@@ -48,17 +48,28 @@ of its own with the environment scrubbed. Separate processes, so a result cached
 on one run is not there for the next, and the timing is the average of the three.
 
 The binary writes its timings to a file rather than printing them, so a candidate
-debugging on stdout cannot corrupt its own score. It also writes out the
-compressed bytes, which `evaluate.py` sizes itself, so the compression ratio is a
-measurement rather than a number the harness was asked to report. Ratio is
-recorded, not scored: the score is decompression time alone.
+debugging on stdout cannot corrupt its own score. On the first run it also writes
+out the compressed bytes, which `evaluate.py` sizes itself, so the compression
+ratio is a measurement rather than a number the harness was asked to report —
+once, because half a gigabyte through `TMPDIR` on every run costs more than it
+measures. Ratio is recorded, not scored: the score is decompression time alone.
 
-One thing is *not* closed. `Decompress` is timed inside the process it runs in, so
-code compiled into that binary could in principle report a time it did not
-achieve. Closing it would mean measuring from outside, which for a benchmark this
-short costs more in verification overhead than the measurement itself is worth.
-The TSP example takes the opposite tradeoff, because a tour length is something
-its evaluator can simply recompute.
+Two things are *not* closed, both for the same reason: `Compress` and `Decompress`
+are compiled into the binary that measures them, and they run in one process
+because the second is called on what the first returned.
+
+So a candidate could report a time it did not achieve — the clock is code it
+shares a binary with. And it could keep the input in a package-level variable
+during `Compress` and hand it back from `Decompress`, which forges nothing and
+simply is fast. `problem.md` requires `Decompress` to reconstruct the values from
+the bytes it is given, which rules the second out by rule rather than by
+structure.
+
+Closing either means measuring from outside, or splitting the two calls across
+two processes. For a benchmark this short both cost more than the measurement is
+worth, so what is left is that a deliberate cheat succeeds and is plainly visible
+in the winning solution's source. The TSP example takes the opposite tradeoff,
+because a tour length is something its evaluator can simply recompute.
 
 ## Solution Found by Optiverse
 

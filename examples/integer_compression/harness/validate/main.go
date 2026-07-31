@@ -56,6 +56,9 @@ func increasing(n int, averageGap uint32, seed int64) []uint32 {
 	random := rand.New(rand.NewSource(seed))
 	data := make([]uint32, n)
 
+	// No overflow guard: the widest case here is 1000 values averaging a gap of
+	// 100000, which tops out four orders of magnitude below MaxUint32. The cases
+	// that do reach the ceiling are written out as literals below.
 	var current uint64
 	for i := range data {
 		gap := uint64(1)
@@ -64,10 +67,6 @@ func increasing(n int, averageGap uint32, seed int64) []uint32 {
 		}
 
 		current += gap
-		if current > math.MaxUint32 {
-			current = math.MaxUint32 - uint64(n-i)
-		}
-
 		data[i] = uint32(current)
 	}
 

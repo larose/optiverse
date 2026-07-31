@@ -37,9 +37,14 @@ def main() -> None:
             str(EXAMPLE_DIRECTORY / "harness" / "evaluate.py"),
         ],
         # Scoring compiles the candidate, then streams a 577 MB dataset through
-        # Compress/Decompress once per run, in a process per run.
+        # Compress/Decompress once per run, in a process per run. Validation
+        # compiles it too, which is most of what its budget is for.
+        #
+        # Both are larger than the harness's own worst case, so a slow candidate
+        # is killed by the timeout that knows what it was doing rather than by
+        # this one, which would report it as a broken evaluator.
         score_timeout_seconds=600.0,
-        validate_timeout_seconds=120.0,
+        validate_timeout_seconds=180.0,
     )
 
     config = optiverse.config.OptimizerConfig(

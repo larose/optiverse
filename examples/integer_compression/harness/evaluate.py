@@ -25,8 +25,8 @@ What the harness reports and what this file measures are deliberately different.
 The binary writes its timings to a file — a candidate printing debug output
 cannot corrupt its own score — and writes out the compressed bytes, which this
 file sizes itself rather than trusting a ratio the harness was asked to print.
-The timings are still taken inside the candidate's own process, which is the one
-thing here that a determined candidate could falsify; see README.md.
+The timings are still taken inside the candidate's own process, which is what a
+determined candidate could falsify; see README.md.
 """
 
 import json
@@ -45,7 +45,8 @@ HARNESS_DIRECTORY = Path(__file__).parent
 
 CANDIDATE_DIRECTORY_NAME = "candidate"
 BINARY_NAME = "bench"
-OUTPUT_PREFIX = "result"
+MEASUREMENTS_NAME = "result.json"
+COMPRESSED_NAME = "result.bin"
 
 # The module belongs to the harness. A candidate that ships one of these turns
 # its own directory into a separate module, which drops it out of the build; say
@@ -54,22 +55,32 @@ MODULE_FILE_NAMES = frozenset({"go.mod", "go.sum"})
 
 SCORE_RUNS = 3
 
-BUILD_TIMEOUT_SECONDS = 300
-VALIDATE_TIMEOUT_SECONDS = 120
-SCORE_TIMEOUT_SECONDS = 300
+# Sized to fit inside the timeouts optimize.py gives optiverse, worst case
+# included: a build plus every run has to finish before the outer one fires.
+# Otherwise a merely slow candidate is reported as a broken evaluator, and on the
+# validate path the agent is told the setup is at fault rather than its code.
+BUILD_TIMEOUT_SECONDS = 120
+VALIDATE_TIMEOUT_SECONDS = 30
+SCORE_TIMEOUT_SECONDS = 120
 
 Metrics = Dict[str, Union[int, float]]
 
 
 def _candidate_sources(codebase: Path) -> List[Path]:
-    """Every Go file in the codebase. A solution may be more than one."""
-    return sorted(path for path in codebase.rglob("*.go") if path.is_file())
+    """The Go files that make up the package. A solution may be more than one.
+
+    The root only, because that is what `package candidate` is: Go allows one
+    package per directory, so anything in a subdirectory is a package of its own
+    and is not compiled unless something imports it. Counting those would report
+    lines that never reach the build.
+    """
+    return sorted(path for path in codebase.glob("*.go") if path.is_file())
 
 
 def _rejection(codebase: Path) -> Optional[str]:
     """Why this codebase cannot be built at all, or None."""
     if not _candidate_sources(codebase):
-        return "the codebase contains no .go files"
+        return "the codebase contains no .go files at its root"
 
     for path in sorted(codebase.rglob("*")):
         if path.is_file() and path.name in MODULE_FILE_NAMES:
@@ -200,8 +211,15 @@ def validate(codebase: Path) -> bool:
         return _execute(workspace / BINARY_NAME, [], VALIDATE_TIMEOUT_SECONDS)
 
 
-def _run_once(binary: Path, run_directory: Path) -> Optional[Dict[str, object]]:
-    """One measurement, in a directory nothing else has touched."""
+def _run_once(
+    binary: Path, run_directory: Path, *, write_compressed: bool
+) -> Optional[Dict[str, object]]:
+    """One measurement, in a directory nothing else has touched.
+
+    The compressed bytes are wanted once, to size them. Writing them on every run
+    would put half a gigabyte through TMPDIR for each one, which for a candidate
+    that barely compresses is more I/O than the thing being measured.
+    """
     executable = run_directory / BINARY_NAME
     shutil.copy2(binary, executable)
 
@@ -209,19 +227,22 @@ def _run_once(binary: Path, run_directory: Path) -> Optional[Dict[str, object]]:
         "-instance",
         str(dataset.BINARY_FILE),
         "-output",
-        OUTPUT_PREFIX,
+        MEASUREMENTS_NAME,
     ]
+
+    if write_compressed:
+        arguments += ["-compressed", COMPRESSED_NAME]
 
     if not _execute(executable, arguments, SCORE_TIMEOUT_SECONDS):
         return None
 
-    return _read_measurements(run_directory / f"{OUTPUT_PREFIX}.json")
+    return _read_measurements(run_directory / MEASUREMENTS_NAME)
 
 
 def score(codebase: Path) -> Tuple[Optional[float], Metrics]:
     sources = _candidate_sources(codebase)
     metrics: Metrics = {
-        "go_file_count": len(sources),
+        "file_count": len(sources),
         "line_count": sum(source.read_text().count("\n") for source in sources),
     }
 
@@ -259,7 +280,10 @@ def score(codebase: Path) -> Tuple[Optional[float], Metrics]:
             # next one to find.
             with tempfile.TemporaryDirectory() as raw_run_directory:
                 run_directory = Path(raw_run_directory)
-                measurements = _run_once(binary, run_directory)
+                first_run = attempt == 0
+                measurements = _run_once(
+                    binary, run_directory, write_compressed=first_run
+                )
 
                 if measurements is None:
                     return None, metrics
@@ -270,15 +294,17 @@ def score(codebase: Path) -> Tuple[Optional[float], Metrics]:
                 if decompression is None or compression is None:
                     return None, metrics
 
-                compressed_size = (
-                    (run_directory / f"{OUTPUT_PREFIX}.bin").stat().st_size
-                )
+                if first_run:
+                    compressed_path = run_directory / COMPRESSED_NAME
 
-                print(
-                    f"decompression: {decompression:.1f} ms, "
-                    f"compressed: {compressed_size} bytes",
-                    file=sys.stderr,
-                )
+                    if not compressed_path.is_file():
+                        print("the run produced no compressed output", file=sys.stderr)
+                        return None, metrics
+
+                    compressed_size = compressed_path.stat().st_size
+                    print(f"compressed: {compressed_size} bytes", file=sys.stderr)
+
+                print(f"decompression: {decompression:.1f} ms", file=sys.stderr)
 
                 decompression_times.append(decompression)
                 compression_times.append(compression)
