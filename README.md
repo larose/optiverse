@@ -1,167 +1,154 @@
 # Optiverse
 
-Optiverse is a Python library for evolving code and algorithms using coding agents. Inspired by Deepmind's [AlphaEvolve](https://deepmind.google/discover/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/), it provides a flexible framework to iteratively improve whole codebases, in any programming language.
+Optiverse searches for better code. You give it a seed codebase, a description
+of the problem, and a command that measures a candidate. It evolves a population
+of solutions, each one written by a coding agent and ranked by your evaluator.
 
-With Optiverse, you define a problem and provide an evaluator. The system then generates and evolves candidate solutions over multiple iterations, learning which approaches yield better results.
+The unit of evolution is a **directory**, so a candidate can restructure a whole
+package rather than fill in a marked region. The measurement is a **process**,
+so the evolved code can be in any language, and what counts as better is decided
+by a program you wrote.
 
-Each candidate is produced by an **agent working in a real directory**, not by a single model call. The agent can read files, compile, run tests and fix its own mistakes before handing the solution back — so an iteration rarely ends in code that does not even build.
+## Where this comes from
 
-📖 **Read the announcement post:** [Optiverse: Evolving Code with LLMs](https://mathieularose.com/optiverse-evolving-code-with-llms)
+DeepMind's [AlphaEvolve](https://deepmind.google/discover/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)
+established the premise: an LLM inside an evolutionary loop reaches algorithms
+that neither the model alone nor the search alone finds. Optiverse takes that
+premise and gives the writing of each candidate to a coding agent with a shell,
+and the judging of it to an ordinary program of your own.
 
-## Table of Contents
+## What the design commits to
 
+**A solution is a directory.** The thing being improved is a package, so nothing
+has to be marked as evolvable and any file in it can be added, rewritten or
+deleted.
 
-- [Why Optiverse?](#why-optiverse)
-- [Use Cases](#use-cases)
-- [Quick Start](#quick-start)
-- [License](#license)
+**The evaluator is the spec.** It is a command, in any language, and the only
+thing that ever measures anything. This is where the real difficulty of the
+method lives.
 
-## Why Optiverse?
+**Everything is a plain file.** Solutions, lineage, agent trajectories and the
+checkpoint all live under one run directory, so a run is resumable and
+inspectable with the tools you already have.
 
-Optiverse helps developers and researchers automate code improvement by generating, refining, and optimizing entire programs. Its design enables broad experimentation and fast iteration across diverse problem domains. Key capabilities include:
+## How an iteration works
 
-- **Whole-codebase optimization**: Unlike other implementations that operate on isolated functions or code blocks, a solution in Optiverse is a directory. An agent may add, rename and delete files, so it can restructure a package rather than rewriting one file.
-- **Agents, not one-shot answers**: candidates are produced by [mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent) working in a real directory, with a command it can run to check its own work.
-- **Modular architecture**: Swap or customize search strategies and generators to experiment with different approaches.
-- **Multi-language support**: An evaluator is a command, not a Python class, so it can be a shell script, a Go binary or a Makefile — and the code under test can be in any language.
-- **Flexible LLM integration**: model access goes through [LiteLLM](https://github.com/BerriAI/litellm), which talks to ~150 providers in their own dialect — hosted, self-hosted or local — so switching models is one environment variable.
-- **A dependency-free core**: the search loop, the store and the two process contracts are pure standard library. Only the agent generator needs an extra.
+1. The search strategy picks parent solutions and decides whether to exploit or
+   diversify.
+2. An agent writes a new candidate, with the parents and their scores available
+   to read. It checks itself with `validate`, and its turn ends the moment that
+   passes on code it changed.
+3. Optiverse scores the result and records it with its metrics and lineage.
 
-### How an iteration works
+The agent is told whether its code is **valid**, never how it **scores**. It can
+read its parents' scores but has no way to measure its own work, because an
+agent that could rank itself would abandon a novel approach as soon as it looked
+worse than the incumbent, which is the very move that escapes a local optimum.
 
-1. The search strategy picks parent solutions and decides whether to exploit or diversify.
-2. Each parent is copied into `references/` inside a fresh solution directory, with its score and metrics alongside it.
-3. An agent fills that solution directory, which starts **empty** — it decides what to take from a parent and what to write from scratch. It can run `<evaluate> validate <dir>` as often as it likes; the moment that passes on changed code, its turn ends.
-4. Optiverse runs `<evaluate> score <dir>` and records the score, metrics and lineage.
+## Quick start
 
-Every parent the agent sees is a copy it owns, so nothing it does can reach a stored solution. Nothing is made read-only; the originals are simply never named.
-
-The agent is told whether its own code is **valid**, never how it **scores**. It can read the parent solutions' scores, but it has no way to measure its own work — and that is the point. Ranking candidates is the search loop's job; an agent that could score itself would abandon a novel approach as soon as it looked worse than the incumbent, which is the very move that escapes local optima.
-
-## Use Cases
-
-These examples showcase Optiverse's ability to generate and refine code for a wide range of programming tasks, regardless of domain or language.
-
-### Traveling Salesman Problem
-
-The TSP example evolved an advanced Iterated Local Search algorithm with 2-opt improvements, achieving near-optimal results on benchmark instances. The evolved solution includes sophisticated perturbation operators and performance optimizations.
-
-[View detailed TSP results →](examples/tsp/README.md)
-
-### Integer Compression
-
-The integer compression example evolved a Go implementation with performance comparable to established C implementations. The evolved algorithm uses block-based delta encoding with binary packing, achieving competitive decompression speeds.
-
-[View detailed integer compression results →](examples/integer_compression/README.md)
-
-## Quick Start
-
-Follow these steps to set up Optiverse and run an example.
-
-### 1. Set Up Environment
-
-First, create a virtual environment and install dependencies:
+Requirements: Python 3.10 or newer. The integer compression example also needs a
+Go toolchain and downloads about 1.6 GB of benchmark data; TSP needs neither.
 
 ```bash
-make init
+pip install optiverse
 ```
 
-Then, activate the virtual environment:
+To run the bundled examples, work from a checkout:
 
 ```bash
+git clone https://github.com/larose/optiverse
+cd optiverse
+make init
 source venv/bin/activate
 ```
 
-### 2. Run the Traveling Salesman Problem example:
+### Choosing a model
 
-This example uses Optiverse to solve the [Traveling Salesman Problem (TSP)](https://en.wikipedia.org/wiki/Travelling_salesman_problem). The code is in the [examples/tsp](examples/tsp) directory.
+Model access goes through [LiteLLM](https://github.com/BerriAI/litellm), so set
+`OPTIVERSE_MODEL` to a [LiteLLM model name](https://docs.litellm.ai/docs/providers)
+such as `gemini/gemini-3.6-flash`, `anthropic/claude-sonnet-5` or `ollama/qwen3`.
 
-Model selection goes through LiteLLM, which speaks each provider's own API — Anthropic, Bedrock and Vertex are as native as OpenAI, and local servers work too. Set one variable:
+Credentials are your provider's own environment variables, set as that provider
+documents them (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_API_BASE`).
 
-- `OPTIVERSE_MODEL`: a [LiteLLM model name](https://docs.litellm.ai/docs/providers), such as `gemini/gemini-3.6-flash`, `anthropic/claude-sonnet-5` or `ollama/qwen3`
-
-Credentials are your provider's own environment variables, set exactly as that provider's documentation says — `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `OLLAMA_API_BASE` for a local server. LiteLLM reads them directly; Optiverse never handles your key.
+### Running the TSP example
 
 ```bash
 GEMINI_API_KEY="your-gemini-api-key" OPTIVERSE_MODEL="gemini/gemini-3.6-flash" make run.tsp
 ```
 
-Each iteration is bounded by a step limit and a wall-clock limit, but **not** by cost. Spend is recorded per candidate as `m_agent_cost_usd` in `solutions.csv`; check the first few rows before leaving a long run unattended.
-
-### Sample Output:
-
-When you run it, you'll see output like this:
-
-```bash
-2026-07-30 10:47:22 - optiverse.optimizer - INFO - Starting fresh optimization...
-2026-07-30 10:47:22 - optiverse.optimizer - INFO - Evaluating and saving initial solution...
-2026-07-30 10:47:22 - optiverse.optimizer - INFO - Initial solution saved with ID: 2787c4d511664076952e530a8e9a20fc, score: 34271.8174318594
-2026-07-30 10:47:24 - optiverse.optimizer - INFO - Starting iteration 1/100
-2026-07-30 10:48:41 - optiverse.optimizer - INFO - Saved solution 9f1c0a3d5b784e2a8c6f0d21b4e37a58, score: 3146.3732212611126
-2026-07-30 10:48:41 - optiverse.optimizer - INFO - Starting iteration 2/100
-
-...
-
-2026-07-30 12:31:09 - optiverse.optimizer - INFO - ==================================================
-2026-07-30 12:31:09 - optiverse.optimizer - INFO - BEST SOLUTION:
-2026-07-30 12:31:09 - optiverse.optimizer - INFO - ==================================================
-2026-07-30 12:31:09 - optiverse.optimizer - INFO - ID: 2787c4d511664076952e530a8e9a20fc
-2026-07-30 12:31:09 - optiverse.optimizer - INFO - Score: 2593.108
-2026-07-30 12:31:09 - optiverse.optimizer - INFO - Codebase: tmp/20260730_104722/2787c4d511664076952e530a8e9a20fc/code
-2026-07-30 12:31:09 - optiverse.optimizer - INFO - Files:
-  solver.py (6134 bytes)
+```
+INFO - Initial solution saved with ID: d174dcc51ad6417185c641bb155d774f, score: 33974.57856961731
+INFO - Starting iteration 1/100
+INFO - Saved solution cacfb3eb073849a5a6cc8fba90766a68, score: 2840.0775730311016
+INFO - Starting iteration 2/100
+INFO - Saved solution a037326a1b3740098ea928789675a80d, score: 2678.5583501149986
 ```
 
-### Understanding the Results
+Iterations are bounded by a step limit and a wall-clock limit, but **not** by
+cost, so check what the first few cost before leaving a long run unattended.
 
-During optimization, Optiverse saves results in directories named `tmp/YYYYMMDD_HHMM`, indicating the date and time of each run.
+## What comes out of a run
 
-#### `solutions.csv`
+Each run writes to `tmp/YYYYMMDD_HHMMSS`, named for when it started:
 
-
-Inside each run directory, `solutions.csv` provides a high-level overview of all solutions explored:
-
-
-| id                               | score           | t_group | t_move          | t_exit_status | t_parent_id_1                    | m_agent_cost_usd | ... |
-|----------------------------------|-----------------|---------|-----------------|---------------|----------------------------------|------------------|-----|
-| 0d8c5789dde24a94901871c18d6d9854 | 2817.0555492637 | 1       | local_search    | Validated     | 034afd2da8894ab6838efb17bc28f201 | 0.031            | ... |
-| a42574709f27484fade7adc76683b2cf | 2828.6215589938 | 6       | perturb_explore | Validated     | 96c7140054154a20a4b67fd986658dd4 | 0.048            | ... |
-| 883f6de275c14b32822feb5cdaaba55d | 2837.3500311898 | 6       | local_search    | LimitsExceeded| a42574709f27484fade7adc76683b2cf | 0.100            | ... |
-
-Any metric an evaluator returns becomes an `m_*` column, and any tag a strategy
-or generator sets becomes a `t_*` column, so `t_exit_status` and
-`m_agent_cost_usd` need no extra tooling to plot.
-
-#### Individual Solution Directories
-
-Each solution has a dedicated directory named after its ID, containing:
-
-- `code/`: The solution itself — a directory, with however many files the agent chose to write.
-- `references/<parent_id>/`: The copy of each parent the agent was given, holding that parent's `code/` and a `metadata.txt` with its score and metrics.
-- `agent.log`: The agent's full trajectory, including every command it ran.
-- `metadata.json`: ID, score, metrics and tags.
-
-There is deliberately no stored evaluator log. It is reproducible from the files
-that are kept, and re-running gives fuller output than a stale copy:
-
-```bash
-python examples/tsp/harness/evaluate.py score tmp/<run>/<id>/code
+```
+tmp/20260730_133833/
+  solutions.csv                     the population, best score first
+  checkpoint.json                   where to resume from
+  <solution id>/
+    code/                           the solution itself
+    references/<parent id>/         the copy of each parent the agent was given
+    agent.log                       the agent's full trajectory
+    metadata.json                   id, score, metrics, tags
 ```
 
-A directory with no `metadata.json` is an iteration that died partway through. It
-is ignored by later iterations and left in place for you to inspect.
+In `solutions.csv`, every metric an evaluator returns becomes an `m_*` column
+and every tag a strategy or generator sets becomes a `t_*` column, so cost,
+lineage and problem-specific measurements plot without extra tooling. A
+candidate the evaluator could not score reads `FAILED` and sorts to the bottom.
 
-## Defining Your Own Problem
+To resume, point a run at a directory it already wrote. It continues from the
+iteration after the last one that finished, with the population it had found:
+
+```bash
+DIRECTORY=tmp/20260730_133833 make run.tsp
+```
+
+No evaluator log is kept, since re-running one beats a stale copy:
+`python examples/tsp/harness/evaluate.py score tmp/<run>/<id>/code`. A directory
+with no `metadata.json` is an iteration that died partway through; it is ignored
+and left for you to inspect.
+
+## Defining your own problem
 
 A problem is a seed codebase, a description, and an evaluator command:
 
 ```python
-problem = optiverse.config.Problem(
-    description=Path("problem.md").read_text(),
-    initial_codebase=Path("initial"),
-    evaluate_command=["./evaluate"],
-)
+import optiverse
+from optiverse.generators.agent import AgentGenerator
+
+optiverse.optimizer.Optimizer(
+    optiverse.config.OptimizerConfig(
+        directory=Path("tmp/run"),
+        generator=AgentGenerator.from_env(),
+        max_iterations=100,
+        problem=optiverse.config.Problem(
+            description=Path("problem.md").read_text(),
+            initial_codebase=Path("initial"),
+            evaluate_command=["./evaluate"],
+        ),
+        search_strategy=optiverse.search_strategies.IteratedLocalSearch(
+            max_iterations_without_improvements=10
+        ),
+    )
+).run()
 ```
+
+That strategy improves the best solution it has until ten iterations pass
+without progress, then perturbs. Strategy and generator are interfaces, so
+either can be replaced.
 
 ### The evaluator contract
 
@@ -173,47 +160,66 @@ An evaluator is any executable that accepts two subcommands:
 ```
 
 - **`validate`** answers with its exit code alone. Print whatever diagnostics
-  help — compiler errors, failing assertions — on either stream; the agent reads
-  all of it. Because there is no payload, there is no score to leak.
+  help on either stream; the agent reads all of it. Because there is no payload,
+  there is no score to leak. Keep it cheap: the agent runs it repeatedly, and it
+  only has to answer "does this work".
 - **`score`** prints JSON on stdout and may log freely on stderr. **Lower scores
-  are better.** `"score": null` means the run completed but the candidate cannot
-  be scored; a non-zero exit means the *evaluator itself* broke, which Optiverse
-  reports loudly rather than counting as another bad candidate.
+  are better.** `"score": null` means the candidate cannot be scored. A non-zero
+  exit means the *evaluator itself* broke, which Optiverse reports loudly rather
+  than counting as another bad candidate.
 
-Keep `validate` cheap. The agent runs it repeatedly, and it only has to answer
-"does this work", not "how good is it" — the integer compression example checks
-`Decompress(Compress(data)) == data` on a few thousand synthetic integers in
-milliseconds, while scoring streams a 577 MB dataset.
-
-Your evaluator owns its own test harness. Assemble a temporary workspace and put
-the candidate in a **subdirectory** of it, with your harness at the root: that
-way the stored solution is never touched, and a candidate cannot stand in for
-part of your harness no matter what it names its files. Both examples do this —
-TSP appends the candidate's directory to `sys.path`, so the standard library and
-the harness win every name collision; integer compression makes the candidate its
-own Go package. Laying your harness over the top of the candidate's files works
-only for the names you remember to list, so prefer the structural version.
-
-Be deliberate about what the candidate's own process is trusted to report. If the
-objective is something you can recompute — a tour length, a compressed size —
-have the candidate hand back the artifact and measure it yourself, so it chooses
-its answer but not what that answer is worth. If the objective is a timing, that
-separation costs more than it is worth, and the tradeoff is worth making
-consciously.
-
-If your evaluator is Python, `optiverse.evaluator_main` handles the argv and JSON
-plumbing:
+If your evaluator is Python, `optiverse.evaluator_main` handles the plumbing:
 
 ```python
 from optiverse.evaluator_main import run
-
-def validate(codebase: Path) -> bool: ...
-def score(codebase: Path) -> tuple[float | None, dict[str, float]]: ...
 
 if __name__ == "__main__":
     run(score=score, validate=validate)
 ```
 
+### Making an evaluator hard to cheat
+
+Put the candidate in a **subdirectory** of a temporary workspace, with your
+harness at the root, so it cannot stand in for part of your harness whatever it
+names its files. Blocklisting names only covers the ones you thought of.
+
+Then be deliberate about what the candidate's own process is trusted to report.
+If the objective is something you can recompute, such as a tour length or a
+compressed size, take the artifact and measure it yourself. The
+[integer compression example](examples/integer_compression/README.md) works
+through a case where that is not possible and documents which holes it left
+open.
+
+## Examples
+
+**[Traveling Salesman Problem](examples/tsp/README.md).** About 300 iterations
+produced an Iterated Local Search heuristic with 2-opt and four perturbation
+operators, averaging a tour length of 2593 on a 280-city instance, within about
+0.5% of the known optimum.
+
+**[Integer compression](examples/integer_compression/README.md).** About 1000
+iterations produced a Go implementation of block-based delta encoding with
+binary packing, reaching a compression ratio of 230 at decompression speeds in
+the range of established C implementations.
+
+Both were run in 2025 with Qwen3-235B-A22B, on one machine. For the design as it
+stood at the start of the project, see the 2025 announcement post,
+[Optiverse: Evolving Code with LLMs](https://mathieularose.com/optiverse-evolving-code-with-llms).
+
+## Development
+
+```bash
+make init      # virtualenv and dependencies
+make test      # formatting, types and the end-to-end test
+make format    # black over the Python, gofmt over the Go
+```
+
+The loop, the store and the two contracts import nothing outside the standard
+library. The one dependency,
+[mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent), belongs to the
+agent generator.
+
 ## License
 
-Optiverse is open source and licensed under the GNU General Public License v3.0 (GPLv3).
+Optiverse is free software under the GNU General Public License v3.0. See
+[LICENSE](LICENSE).

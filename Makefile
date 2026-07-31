@@ -26,7 +26,7 @@ clean:
 .PHONY: init
 init:
 	python3 -m venv $(VENV)
-	$(PIP) install -e .[dev,agent]
+	$(PIP) install -e .[dev]
 
 .PHONY: format
 format: format.python format.go

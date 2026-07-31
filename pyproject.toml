@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "optiverse"
-version = "0.0.2"
+version = "0.1.0"
 description = "Optimization framework using Large Language Models"
 authors = [{ name = "Mathieu Larose", email = "mathieu@mathieularose.com" }]
 license = "GPL-3.0"
@@ -15,18 +15,14 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
 ]
-# The core is the search loop, the store and two process contracts (the
-# evaluator command, the generator). None of that needs a third-party package.
-dependencies = []
+# The search loop, the store and the two process contracts need nothing. This is
+# for AgentGenerator, the only generator that ships, which cannot run without
+# it. Imported inside the methods that use it, so `import optiverse` still costs
+# nothing.
+dependencies = ["mini-swe-agent==2.4.6"]
 
 [project.optional-dependencies]
-# The mini-swe-agent generator. Optional because it pulls litellm, datasets and
-# textual, which nobody wanting only the loop should have to install.
-agent = ["mini-swe-agent==2.4.6"]
 dev = [
     "black==25.1.0",
     "build==1.2.2.post1",
