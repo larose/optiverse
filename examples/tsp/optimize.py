@@ -6,7 +6,7 @@ from pathlib import Path
 
 import optiverse
 from optiverse.generators.agent import AgentGenerator
-from optiverse.strategists.agent import AgentStrategist
+from optiverse.directors.agent import AgentDirector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,7 +46,7 @@ def main() -> None:
         generator=AgentGenerator.from_env(),
         max_iterations=100,
         problem=problem,
-        strategist=AgentStrategist.from_env(),
+        director=AgentDirector.from_env(),
     )
 
     optiverse.optimizer.Optimizer(config=config).run()

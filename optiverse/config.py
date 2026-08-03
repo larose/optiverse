@@ -10,7 +10,7 @@ from typing import Sequence
 
 from .evaluator import EvaluatorCommand
 from .generator import Generator
-from .strategist import Strategist
+from .director import Director
 
 DEFAULT_PLAYBOOK = Path(__file__).parent / "playbook.md"
 
@@ -41,7 +41,7 @@ class OptimizerConfig:
     generator: Generator
     max_iterations: int
     problem: Problem
-    strategist: Strategist
+    director: Director
 
     playbook: Path = field(default=DEFAULT_PLAYBOOK)
     """Angles for inventing a constraint the search has not tried.

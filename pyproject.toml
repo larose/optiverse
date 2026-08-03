@@ -35,7 +35,7 @@ Homepage = "https://github.com/larose/optiverse"
 Repository = "https://github.com/larose/optiverse"
 
 [tool.setuptools]
-packages = ["optiverse", "optiverse.generators", "optiverse.strategists"]
+packages = ["optiverse", "optiverse.generators", "optiverse.directors"]
 
 # The playbook is data, not code, so it is not installed unless it is named.
 [tool.setuptools.package-data]

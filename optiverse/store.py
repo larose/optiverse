@@ -1,25 +1,27 @@
 """Persistence for the population.
 
-A solution is a directory:
+A solution is a directory, and it holds the product and nothing else:
 
     <run>/solutions/<id>/code/          the codebase
-    <run>/solutions/<id>/references/    copies of the parents it was built from
-    <run>/solutions/<id>/agent.log      the agent's trajectory
-    <run>/solutions/<id>/metadata.json  score, metrics, tags, timing
+    <run>/solutions/<id>/metadata.json  lineage, score, metrics, tags, timing
 
-Solutions live under `solutions/` rather than at the run root so that the rest of
-a run — `solutions.csv`, the strategist's own directory — can sit beside them
-without `get_all_solutions` having to walk it and reject it.
+Everything about how it was made — the prompts, the trajectories, the plan — is
+under `<run>/iterations/<n>/`, because that is the process rather than the
+product.
+
+A solution has two parents and they are independent. `node_id` says which *idea*
+it attempts; `parent_solution_id` says which *code* it started from. Keeping them
+apart is what lets the idea tree stay a tree while the code cross-pollinates.
 
 Ids are allocated *before* generation so the agent can work directly in
-`<id>/code/` rather than in a scratch directory that then has to be copied in.
-
-Nothing here is made read-only. A parent is never handed to an agent in place —
-it gets its own copy under `references/` — so there is nothing to protect.
+`<id>/code/`, and they carry an `s_` prefix so a solution id can never be passed
+where a node id belongs.
 
 `metadata.json` is written atomically and last, which makes its presence the
-marker for a complete solution: a directory left behind by a crashed iteration
-is skipped by `get_all_solutions` and stays on disk to be inspected.
+marker for a complete solution — and, since every iteration produces exactly one
+solution, the marker for a complete iteration. A directory left behind by a
+crashed iteration is skipped by `get_all_solutions` and stays on disk to be
+inspected.
 """
 
 import csv
@@ -33,21 +35,32 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Union, cast
 
 CODE_DIRECTORY_NAME = "code"
-REFERENCES_DIRECTORY_NAME = "references"
-AGENT_LOG_NAME = "agent.log"
 METADATA_NAME = "metadata.json"
 SOLUTIONS_DIRECTORY_NAME = "solutions"
 SOLUTIONS_CSV_NAME = "solutions.csv"
+
+SOLUTION_ID_PREFIX = "s_"
 
 
 @dataclass(frozen=True)
 class Solution:
     codebase: Path
     id: str
-    is_initial: bool
     metrics: Dict[str, Union[float, int]]
     score: Optional[float]
     tags: Dict[str, Union[int, str]]
+
+    node_id: str
+    """The idea this attempts: a node in the search graph."""
+
+    parent_solution_id: Optional[str]
+    """The code this started from. None only for the seed, which started from
+    the problem's initial codebase rather than from a solution."""
+
+    iteration: Optional[int]
+    """Which iteration produced it. None for the seed, which no iteration did —
+    so this doubles as the marker of which solution is the seed, and there is no
+    separate `is_initial` flag to keep in step with it."""
 
     started_at: str
     """When work on this solution began, ISO 8601 local time.
@@ -60,6 +73,10 @@ class Solution:
     """When it was committed. Elapsed is the difference; storing it too would be
     a third column carrying no information the first two do not."""
 
+    @property
+    def is_initial(self) -> bool:
+        return self.iteration is None
+
 
 class Store(ABC):
     @abstractmethod
@@ -70,23 +87,14 @@ class Store(ABC):
     def codebase_path(self, solution_id: str) -> Path: ...
 
     @abstractmethod
-    def references_path(self, solution_id: str) -> Path:
-        """Where the parents are copied for the agent to read.
-
-        Outside `code/`, so a parent never becomes part of the solution built
-        from it and is not inherited by children.
-        """
-
-    @abstractmethod
-    def agent_log_path(self, solution_id: str) -> Path: ...
-
-    @abstractmethod
     def commit(
         self,
         solution_id: str,
         *,
-        is_initial: bool,
+        iteration: Optional[int],
         metrics: Dict[str, Union[int, float]],
+        node_id: str,
+        parent_solution_id: Optional[str],
         score: Optional[float],
         started_at: str,
         tags: Dict[str, Union[str, int]],
@@ -116,25 +124,21 @@ class FileSystemStore(Store):
         return self._solutions_directory() / solution_id
 
     def allocate(self) -> str:
-        solution_id = uuid.uuid4().hex
+        solution_id = SOLUTION_ID_PREFIX + uuid.uuid4().hex
         self.codebase_path(solution_id).mkdir(parents=True)
         return solution_id
 
     def codebase_path(self, solution_id: str) -> Path:
         return self._solution_directory(solution_id) / CODE_DIRECTORY_NAME
 
-    def references_path(self, solution_id: str) -> Path:
-        return self._solution_directory(solution_id) / REFERENCES_DIRECTORY_NAME
-
-    def agent_log_path(self, solution_id: str) -> Path:
-        return self._solution_directory(solution_id) / AGENT_LOG_NAME
-
     def commit(
         self,
         solution_id: str,
         *,
-        is_initial: bool,
+        iteration: Optional[int],
         metrics: Dict[str, Union[int, float]],
+        node_id: str,
+        parent_solution_id: Optional[str],
         score: Optional[float],
         started_at: str,
         tags: Dict[str, Union[str, int]],
@@ -148,8 +152,10 @@ class FileSystemStore(Store):
             codebase=self.codebase_path(solution_id),
             ended_at=datetime.now().isoformat(timespec="seconds"),
             id=solution_id,
-            is_initial=is_initial,
+            iteration=iteration,
             metrics=metrics,
+            node_id=node_id,
+            parent_solution_id=parent_solution_id,
             score=score,
             started_at=started_at,
             tags=tags,
@@ -158,8 +164,10 @@ class FileSystemStore(Store):
         metadata = {
             "ended_at": solution.ended_at,
             "id": solution.id,
-            "is_initial": solution.is_initial,
+            "iteration": solution.iteration,
             "metrics": solution.metrics,
+            "node_id": solution.node_id,
+            "parent_solution_id": solution.parent_solution_id,
             "score": solution.score,
             "started_at": solution.started_at,
             "tags": solution.tags,
@@ -201,18 +209,30 @@ class FileSystemStore(Store):
                     codebase=solution_directory / CODE_DIRECTORY_NAME,
                     ended_at=cast(str, metadata["ended_at"]),
                     id=cast(str, metadata["id"]),
-                    is_initial=cast(bool, metadata["is_initial"]),
+                    iteration=cast(Optional[int], metadata["iteration"]),
                     metrics=cast(Dict[str, Union[float, int]], metadata["metrics"]),
+                    node_id=cast(str, metadata["node_id"]),
+                    parent_solution_id=cast(
+                        Optional[str], metadata["parent_solution_id"]
+                    ),
                     score=cast(Optional[float], metadata["score"]),
                     started_at=cast(str, metadata["started_at"]),
                     tags=cast(Dict[str, Union[int, str]], metadata["tags"]),
                 )
             )
 
-        return solutions
+        # By iteration, so the last of these is the last thing the search did.
+        # The seed has none and sorts first, which is where it belongs.
+        return sorted(
+            solutions, key=lambda s: -1 if s.iteration is None else s.iteration
+        )
 
     def _write_solutions_csv(self) -> None:
-        """Rewrite solutions.csv, best score first, failures last."""
+        """Rewrite solutions.csv, best score first, failures last.
+
+        Lineage gets columns here where the old branch did not: two ids join
+        cleanly, where a list of constraint paragraphs never would.
+        """
         solutions = self.get_all_solutions()
 
         valid_solutions = [s for s in solutions if s.score is not None]
@@ -234,7 +254,15 @@ class FileSystemStore(Store):
         with open(csv_path, "w", newline="") as csv_file:
             writer = csv.writer(csv_file)
             writer.writerow(
-                ["id", "score", "started_at", "ended_at"]
+                [
+                    "id",
+                    "score",
+                    "iteration",
+                    "node_id",
+                    "parent_solution_id",
+                    "started_at",
+                    "ended_at",
+                ]
                 + [f"t_{name}" for name in sorted_tag_names]
                 + [f"m_{name}" for name in sorted_metric_names]
             )
@@ -244,6 +272,9 @@ class FileSystemStore(Store):
                     [
                         solution.id,
                         "failed" if solution.score is None else solution.score,
+                        solution.iteration,
+                        solution.node_id,
+                        solution.parent_solution_id,
                         solution.started_at,
                         solution.ended_at,
                     ]

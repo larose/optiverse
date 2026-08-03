@@ -1,18 +1,16 @@
 """Planning by a coding agent, over mini-swe-agent.
 
-The strategist gets a shell and the run directory. That is the whole idea: rather
+The director gets a shell and the run directory. That is the whole idea: rather
 than being handed a summary somebody else decided was sufficient, it goes and
 reads whatever it needs — a candidate's source, an agent's trajectory, the raw
-journal — and forms its own view.
+arcs — and forms its own view.
 
 Unlike the generator it *is* shown the scores, because ranking is its job. The
 generator is kept ignorant of them so it cannot abandon a novel approach for
-looking worse than the incumbent; the strategist exists to make exactly that
-call.
+looking worse than the incumbent; the director exists to make exactly that call.
 
-It is read-only outside its own directory by convention rather than by
-enforcement, which is the same footing the generator is on with the parent copies
-it is told not to reach past.
+It is read-only outside its own directory and `memory.md` by convention rather
+than by enforcement.
 
 mini-swe-agent annotates several signatures with bare `dict`, which strict mode
 reports as partially unknown. That looseness is in the dependency, not here, so
@@ -26,45 +24,36 @@ import os
 from typing import Any, Dict, Optional, cast
 
 from .._mini_swe_agent import AgentLimits, normalize_exit_status
-from ..strategist import Strategist, StrategistContext, StrategistResult
+from ..director import Director, DirectorContext, DirectorResult
 
 logger = logging.getLogger(__name__)
 
-MODEL_VARIABLE = "OPTIVERSE_STRATEGIST_MODEL"
+MODEL_VARIABLE = "OPTIVERSE_DIRECTOR_MODEL"
 FALLBACK_MODEL_VARIABLE = "OPTIVERSE_MODEL"
 
-# Deciding what to try next is cheaper than building it, so the strategist is
-# held to a tighter budget than the generator's 40 steps and 900 seconds. If it
-# needs forty steps to pick a direction, the digest it was given is the problem.
+# Deciding what to try next is cheaper than building it, so the director is held
+# to a tighter budget than the generator's 40 steps and 900 seconds. If it needs
+# forty steps to pick a direction, the tree it was given is the problem.
 DEFAULT_LIMITS = AgentLimits(step_limit=25, wall_time_limit_seconds=600)
 
-# `ValidateTerminatesEnvironment` refuses to end a turn on an unchanged tree,
-# which stops a generator submitting a parent it merely copied in. The strategist
-# has no equivalent hazard — the plan it validates is the plan it just wrote — so
-# the guard is switched off with a digest nothing can produce, `digest` always
-# returning a full hex hash.
+# `done` refuses to end a turn on an unchanged tree, which stops a generator
+# submitting the parent it was handed. The director has no equivalent hazard —
+# the plan it validates is the plan it just wrote — so the guard is switched off
+# with a digest nothing can produce, `digest` always returning a full hex hash.
 NO_BASELINE_DIGEST = ""
 
 INSTANCE_TEMPLATE = """{{task}}
 
-# Checking your work
-
-Call the `validate` tool to check the plan you have written. It reports what is
-wrong with `plan.json` and `knowledge.md`, or nothing if they are fine. **When it
-reports valid after you have changed something, your task ends immediately** —
-you do not need to submit anything.
-
 # Rules
 
-- Write only inside your working directory. Everything else in the run directory
-  is there for you to read, and reading it is the point.
-- Copy constraint text; do not retype it. A branch is identified by its exact
-  constraint strings, so a reworded one silently starts a new branch. To continue
-  an existing branch, lift its constraints out of `journal.jsonl` with a script.
+- Write only inside your working directory, plus `../../memory.md`. Everything
+  else in the run directory is there for you to read, and reading it is the
+  point.
 - Directory and environment variable changes are not persistent. Every `bash`
   call runs in a new subshell, starting in your working directory.
-- If you get stuck and cannot produce a valid plan, run
-  `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` on its own to give up.
+- Call `validate` to check the plan you have written. It reports what is wrong
+  with `plan.json`, or nothing if it is fine. It does not end your turn.
+- Call `done` once the plan is valid, or `give_up` if you cannot write one.
 
 <system_information>
 {{system}} {{release}} {{version}} {{machine}}
@@ -72,23 +61,23 @@ you do not need to submit anything.
 
 # Useful commands
 
-Read what the best candidate actually does:
+Read what a candidate actually does:
 
-    cat ../solutions/851621dd*/code/*.go
+    cat ../../solutions/s_851621dd*/code/*.go
 
 Write the plan:
 
     cat <<'EOF' > plan.json
-    {"constraints": [], "parent_solution_ids": [], "task": "..."}
+    {"parent_node_id": "n_root", "parent_solution_id": "s_...", "constraint": "..."}
     EOF
 
-Read the last few iterations:
+Read the tree as data:
 
-    tail -n 3 journal.jsonl | python3 -m json.tool --json-lines
+    python3 -m json.tool ../../arcs.json
 """
 
 
-class AgentStrategist(Strategist):
+class AgentDirector(Director):
     def __init__(
         self,
         *,
@@ -99,8 +88,8 @@ class AgentStrategist(Strategist):
         self._limits = limits or DEFAULT_LIMITS
 
     @classmethod
-    def from_env(cls, *, limits: Optional[AgentLimits] = None) -> "AgentStrategist":
-        """Build from `OPTIVERSE_STRATEGIST_MODEL`, falling back to the generator's.
+    def from_env(cls, *, limits: Optional[AgentLimits] = None) -> "AgentDirector":
+        """Build from `OPTIVERSE_DIRECTOR_MODEL`, falling back to the generator's.
 
         Separate because the two jobs do not want the same model: planning reads a
         lot and writes a little, and a run may well want to spend differently on
@@ -117,20 +106,17 @@ class AgentStrategist(Strategist):
 
         return cls(model_name=model_name, limits=limits)
 
-    def decide(self, context: StrategistContext) -> StrategistResult:
+    def decide(self, context: DirectorContext) -> DirectorResult:
         # Imported here so the core stays importable without mini-swe-agent.
         from minisweagent.agents.default import DefaultAgent
 
-        from .._mini_swe_agent import (
-            SYSTEM_TEMPLATE,
-            ValidateTerminatesEnvironment,
-            build_model,
-        )
+        from .._mini_swe_agent import SYSTEM_TEMPLATE, ToolEnvironment, build_model
 
-        environment = ValidateTerminatesEnvironment(
+        environment = ToolEnvironment(
             baseline_digest=NO_BASELINE_DIGEST,
             codebase=context.workdir,
             cwd=str(context.workdir),
+            remember=context.remember,
             timeout=self._limits.command_timeout_seconds,
             validate=context.validate,
         )
@@ -148,24 +134,22 @@ class AgentStrategist(Strategist):
 
         exit_status = self._run(agent, context)
 
-        return StrategistResult(
-            metrics={
-                "strategist_cost_usd": float(agent.cost),
-                "strategist_model_calls": int(agent.n_calls),
-            },
-            tags={"strategist_exit_status": exit_status},
+        return DirectorResult(
+            metrics={"director_model_calls": int(agent.n_calls)},
+            tags={"director_exit_status": exit_status},
         )
 
-    def _run(self, agent: Any, context: StrategistContext) -> str:
+    def _run(self, agent: Any, context: DirectorContext) -> str:
         """Run the agent, treating any failure as a normal outcome.
 
-        A strategist that crashes leaves no plan, and the search falls back to
-        improving the best solution — a weak iteration rather than a lost one.
+        A director that crashes leaves no plan, and the search falls back to
+        another attempt at the best solution — a weak iteration rather than a
+        lost one.
         """
         try:
             outcome = cast(Dict[str, Any], agent.run(task=context.prompt))
         except Exception as error:
-            logger.warning(f"Strategist failed: {error}", exc_info=True)
+            logger.warning(f"Director failed: {error}", exc_info=True)
             return normalize_exit_status(f"error:{type(error).__name__}")
 
         return normalize_exit_status(str(outcome.get("exit_status", "unknown")))

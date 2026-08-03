@@ -1,8 +1,8 @@
 """The generation seam.
 
-A generator is handed an empty codebase directory and the parents it may build
-from, and fills the directory in. Nothing is returned but metadata: the codebase
-*is* the output, and it is already where it belongs.
+A generator is handed a codebase directory holding a copy of the solution it is
+improving, and changes it. Nothing is returned but metadata: the codebase *is*
+the output, and it is already where it belongs.
 """
 
 from abc import ABC, abstractmethod
@@ -16,15 +16,18 @@ from .evaluator import ValidationResult
 @dataclass(frozen=True)
 class GenerationContext:
     codebase: Path
-    """The working directory. Empty; whatever ends up here is the solution."""
+    """The working directory, holding a copy of the parent solution. Whatever
+    ends up here is the new solution."""
 
     log_path: Path
     prompt: str
 
-    references_directory: Path
-    """Copies of the parents, one directory per solution id, each holding `code/`
-    and a `metadata.txt`. They are the generator's own copies, so it may do as it
-    likes with them. Empty when the search had no parents to offer."""
+    remember: Callable[[str], None]
+    """Record something worth carrying to a later iteration — a build rule, a
+    constraint of the environment, a mistake that cost time.
+
+    Every coding agent starts knowing nothing, and this is the only way anything
+    it learns outlives its turn."""
 
     validate: Callable[[], ValidationResult]
     """Whether `codebase` is currently valid, and what the evaluator said.

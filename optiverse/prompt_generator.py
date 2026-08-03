@@ -1,44 +1,60 @@
 """Prompt construction.
 
 Everything about *what to do* is assembled here: what the loop is, the problem,
-where the agent works, which parents it has, and the task. What is left to the
-generator is *how to work* — the tools it has, the format of a reply — because
-that varies with what is driving the codebase.
+what is already in the working directory, and the constraints in force. What is
+left to the generator is *how to work* — the tools it has — because that varies
+with what is driving the codebase.
 
-The prompt carries neither source code nor scores. The parents are directories on
-disk, each with its own `metadata.txt`, so a three-parent prompt does not carry
-three whole codebases and the agent reads only what it decides to read.
+The prompt carries no scores at all, not the candidate's own and not its
+parent's. It carries no source either: the parent's code is already in the
+working directory, so a prompt does not have to hold a copy of it.
 
-Paths are relative. The generator starts the agent in its own codebase, so `.` is
-the solution and `../references` is beside it — a run directory pasted in full
-three times was noise the agent had to read past.
+There is no task. The constraints are the whole instruction, which is what makes
+them load-bearing rather than bookkeeping — they are the reason this candidate
+will differ from its parent, and the search graph is a complete record precisely
+because nothing else is said.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List
+from typing import List, Sequence
 
 from .config import Problem
-from .search import SearchResult
 
 OPENING = """You are one step of an automated search for a better solution to \
 the problem below.
 
-Earlier steps produced the parent solutions. You produce exactly one new
-candidate. It is scored automatically once you finish, and lower scores are
-better; you will not be told what yours was."""
+An earlier step produced the code in your working directory. You produce exactly
+one new candidate by changing it. It is scored automatically once you finish,
+and lower scores are better; you will not be told what yours was, or what
+anything else scored."""
+
+WORKING_DIRECTORY = """You are in it, and it already holds a copy of the solution
+you are improving. Whatever you leave here is your candidate, and nothing outside
+it is. Edit it, rewrite parts of it, or clear it out and start again — but it has
+to end up different from what you found, or you cannot finish."""
+
+CONSTRAINTS_OPENING = (
+    "**Work within these constraints.** They are not optional, and they are the "
+    "point of this attempt."
+)
+
+MEMORY_OPENING = (
+    "Learned on earlier attempts at this problem. None of it is about what to "
+    "build; it is what has already cost somebody time."
+)
 
 
 @dataclass(frozen=True)
 class PromptGeneratorContext:
     problem: Problem
-    search_result: SearchResult
 
-    references_directory: str
-    """Where the parent copies are, relative to the codebase the agent works in.
+    constraints: Sequence[str]
+    """Every constraint in force at the node this candidate belongs to, root
+    first. Empty at the root, which is the whole space."""
 
-    Relative because the agent reads it, and given rather than assumed because
-    where a run puts its files is the optimizer's business, not the prompt's."""
+    memory: Sequence[str]
+    """What the director thought worth passing on from `memory.md`."""
 
 
 class PromptGenerator(ABC):
@@ -59,44 +75,30 @@ class DefaultPromptGenerator(PromptGenerator):
             "",
             "# Your working directory",
             "",
-            "You are in it, and it is **empty**. Whatever you leave here is your",
-            "solution, and nothing outside it is.",
-            "",
-            *self._parents(context),
-            "# Your task",
-            "",
-            context.search_result.task.strip(),
+            WORKING_DIRECTORY,
+            *self._constraints(context),
+            *self._memory(context),
         ]
 
         return "\n".join(sections) + "\n"
 
-    def _parents(self, context: PromptGeneratorContext) -> List[str]:
-        solutions = context.search_result.solutions
-
-        if not solutions:
+    def _constraints(self, context: PromptGeneratorContext) -> List[str]:
+        if not context.constraints:
             return []
 
-        directory = context.references_directory
+        lines = ["", "# Your constraints", "", CONSTRAINTS_OPENING, ""]
 
-        lines = ["# The parent solutions", "", "You have your own copy of each:", ""]
+        for constraint in context.constraints:
+            lines.append(constraint.strip())
+            lines.append("")
 
-        for solution_with_title in solutions:
-            identifier = solution_with_title.solution.id
-            lines.append(
-                f"- `{directory}/{identifier}/` — {solution_with_title.title}. "
-                f"`code/` is the solution, `metadata.txt` its score and metrics."
-            )
+        return lines
 
-        lines += [
-            "",
-            "To start from one of them:",
-            "",
-            "```",
-            f"cp -r {directory}/<id>/code/. .",
-            "```",
-            "",
-            "They are copies. Edit or delete them freely.",
-            "",
-        ]
+    def _memory(self, context: PromptGeneratorContext) -> List[str]:
+        if not context.memory:
+            return []
+
+        lines = ["", "# What is already known", "", MEMORY_OPENING, ""]
+        lines += [f"- {line.strip()}" for line in context.memory]
 
         return lines

@@ -1,20 +1,19 @@
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Union, cast
+from typing import cast
 
 from . import codebase as codebase_helpers
 from .config import OptimizerConfig
 from .evaluator import SCORE, EvaluatorError, ScoreResult
-from .generator import GenerationContext, GenerationResult
+from .generator import GenerationContext
+from .graph import ROOT_NODE_ID
 from .prompt_generator import DefaultPromptGenerator, PromptGeneratorContext
-from .search import Search, SearchResult
-from .store import CODE_DIRECTORY_NAME, FileSystemStore, Solution
+from .search import Search
+from .store import FileSystemStore, Solution
+
 
 logger = logging.getLogger(__name__)
-
-REFERENCE_METADATA_NAME = "metadata.txt"
 
 
 class Optimizer:
@@ -27,9 +26,9 @@ class Optimizer:
         self._generator = config.generator
         self._search = Search(
             directory=config.directory,
+            director=config.director,
             playbook=config.playbook,
             store=self._store,
-            strategist=config.strategist,
         )
 
     def _do_iteration(self, iteration: int) -> None:
@@ -37,6 +36,11 @@ class Optimizer:
             iteration=iteration,
             problem_description=self._config.problem.description,
         )
+        plan = search_result.plan
+
+        if plan is None:
+            logger.warning(f"Iteration {iteration} has nothing to build on; skipping")
+            return
 
         # Allocate first, so the agent works directly in the solution's final
         # home. There is no scratch directory and nothing to copy back.
@@ -44,78 +48,51 @@ class Optimizer:
         solution_id = self._store.allocate()
         codebase = self._store.codebase_path(solution_id)
 
-        # Before the prompt, which names the copies.
-        references_directory = self._copy_references(search_result, solution_id)
+        # The agent opens on the code it is improving rather than copying it in
+        # itself, which is one thing fewer to get wrong and makes "you changed
+        # nothing" a fact the environment can check.
+        codebase_helpers.materialize(
+            self._store.codebase_path(plan.parent_solution_id), codebase
+        )
 
         prompt = self._prompt_generator.generate(
             PromptGeneratorContext(
+                constraints=self._search.constraints(plan.node_id),
+                memory=plan.memory,
                 problem=self._config.problem,
-                references_directory=os.path.relpath(references_directory, codebase),
-                search_result=search_result,
             )
         )
+        self._search.write_generator_prompt(iteration, prompt)
 
         generation_result = self._generator.generate(
             GenerationContext(
                 codebase=codebase,
-                log_path=self._store.agent_log_path(solution_id),
+                log_path=self._search.generator_log_path(iteration),
                 prompt=prompt,
-                references_directory=references_directory,
+                remember=lambda text: self._search.remember(
+                    iteration, "generator", text
+                ),
                 validate=lambda: self._evaluator.validate(codebase),
             )
         )
 
         score_result = self._score(codebase)
 
-        solution = self._store.commit(
+        self._store.commit(
             solution_id,
-            is_initial=False,
+            iteration=iteration,
             metrics={**score_result.metrics, **generation_result.metrics},
+            node_id=plan.node_id,
+            parent_solution_id=plan.parent_solution_id,
             score=score_result.score,
             started_at=started_at,
-            tags=self._tags(search_result, generation_result),
+            tags={**search_result.tags, **generation_result.tags},
         )
-
-        self._search.record(iteration=iteration, solution=solution)
 
         if score_result.score is None:
             logger.info(f"Saved unscoreable solution {solution_id} for inspection")
         else:
             logger.info(f"Saved solution {solution_id}, score: {score_result.score}")
-
-    def _copy_references(self, search_result: SearchResult, solution_id: str) -> Path:
-        """Give the agent its own copy of every parent, named by solution id.
-
-        Copies rather than paths into the population: the agent can then read,
-        edit or throw them away without any of that reaching a stored solution.
-        The codebase it starts from is empty, so what it takes from a parent is
-        its decision rather than ours.
-        """
-        references_directory = self._store.references_path(solution_id)
-        references_directory.mkdir(parents=True, exist_ok=True)
-
-        for solution_with_title in search_result.solutions:
-            solution = solution_with_title.solution
-            reference = references_directory / solution.id
-
-            codebase_helpers.materialize(
-                solution.codebase, reference / CODE_DIRECTORY_NAME
-            )
-            (reference / REFERENCE_METADATA_NAME).write_text(_render_metadata(solution))
-
-        return references_directory
-
-    def _tags(
-        self, search_result: SearchResult, generation_result: GenerationResult
-    ) -> Dict[str, Union[int, str]]:
-        """What describes this solution, and nothing about how it was chosen.
-
-        Lineage and the branch it was built under are the journal's business:
-        they are recorded there per iteration, in full, and duplicating them here
-        cost six columns of solutions.csv without answering anything the join
-        cannot.
-        """
-        return {**search_result.tags, **generation_result.tags}
 
     def _score(self, codebase: Path) -> ScoreResult:
         """Score a candidate, treating a broken evaluator as unscoreable.
@@ -151,10 +128,14 @@ class Optimizer:
 
         score_result = self._score(codebase)
 
+        # Under the root, with no constraints and no parent solution: it is where
+        # the search starts rather than something the search did.
         self._store.commit(
             solution_id,
-            is_initial=True,
+            iteration=None,
             metrics=score_result.metrics,
+            node_id=ROOT_NODE_ID,
+            parent_solution_id=None,
             score=score_result.score,
             started_at=started_at,
             tags={},
@@ -168,16 +149,16 @@ class Optimizer:
     def run(self) -> None:
         """Run until the iteration budget is spent, resuming if there is a run here.
 
-        Where to resume is the journal's length: it has one line per finished
-        iteration, so there is no checkpoint file that could disagree with it, and
-        an iteration that died partway through is simply re-run rather than
-        skipped or repeated.
+        Where to resume is the highest iteration among committed solutions.
+        `metadata.json` is written atomically and last, and every iteration
+        produces exactly one solution, so a committed solution is the record that
+        its iteration finished — there is no checkpoint file that could disagree
+        with it, and an iteration that died partway through is simply re-run.
 
         Iterations are numbered from 1, and it is the loop that counts that way
         rather than each place the number is displayed. The same value reaches the
-        console, the strategist's log filename and the journal, so there is no
-        `+ 1` left to forget at a new call site. Counting journal lines still
-        works: a count does not care what the entries are numbered.
+        console, the iteration's directory name and its solution's metadata, so
+        there is no `+ 1` left to forget at a new call site.
         """
         completed = self._search.completed_iterations()
 
@@ -219,28 +200,6 @@ class Optimizer:
 
         logger.info(f"ID: {best_solution.id}")
         logger.info(f"Score: {best_solution.score}")
+        logger.info(f"Node: {best_solution.node_id}")
         logger.info(f"Codebase: {best_solution.codebase}")
         logger.info(f"Files:\n{codebase_helpers.describe(best_solution.codebase)}")
-
-
-def _render_metadata(solution: Solution) -> str:
-    """What a parent looks like to the agent, now that the prompt says nothing.
-
-    Score and metrics only. The id is the directory's own name, and the tags
-    describe the search's bookkeeping rather than the solution.
-    """
-    score = "unscored" if solution.score is None else solution.score
-
-    lines = [
-        f"Solution: {solution.id}",
-        "",
-        f"Score: {score}",
-        "Lower is better.",
-    ]
-
-    if solution.metrics:
-        lines.append("")
-        lines.append("Metrics:")
-        lines.extend(f"  {name}: {value}" for name, value in solution.metrics.items())
-
-    return "\n".join(lines) + "\n"

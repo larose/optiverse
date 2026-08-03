@@ -1,12 +1,13 @@
 """Generation by a coding agent, over mini-swe-agent.
 
-The agent is given a codebase directory and two tools, `bash` and `validate`. It
-is never given the score: ranking candidates is the search loop's job, and an
-agent that could see the score would abandon a novel approach the moment it
-looked worse than the incumbent — which is exactly the move the loop relies on to
-escape local optima. Answering `validate` ourselves rather than putting a program
-on the path is part of that: the evaluator's command never appears anywhere the
-agent can read it, so `score` is not one word away from `validate`.
+The agent is given a working directory holding a copy of the solution it is
+improving, and five tools. It is never given a score — not its own, not its
+parent's. Ranking is the search loop's job, and an agent that could see the
+score would abandon a novel approach the moment it looked worse than the
+incumbent, which is exactly the move the loop relies on to escape local optima.
+Answering `validate` ourselves rather than putting a program on the path is part
+of that: the evaluator's command never appears anywhere the agent can read it,
+so `score` is not one word away from `validate`.
 
 mini-swe-agent is imported inside the methods that use it, so `import optiverse`
 stays dependency-free.
@@ -20,7 +21,7 @@ it is suppressed for this file only.
 
 import logging
 import os
-from typing import Any, Dict, Optional, Set, cast
+from typing import Any, Dict, Optional, cast
 
 from .. import codebase as codebase_helpers
 from .._mini_swe_agent import AgentLimits, normalize_exit_status
@@ -28,33 +29,26 @@ from ..generator import GenerationContext, GenerationResult, Generator
 
 logger = logging.getLogger(__name__)
 
-# Models already reported as unpriced, so the notice is given once per process.
-_UNPRICED_MODELS: Set[str] = set()
-
 MODEL_VARIABLE = "OPTIVERSE_MODEL"
 
 INSTANCE_TEMPLATE = """{{task}}
-
-# Checking your work
-
-Call the `validate` tool to check your solution. **When it reports valid after
-you have changed something, your task ends immediately** — you do not need to
-submit anything.
-
-It reports validity only. It says nothing about how good the solution is; that is
-judged after you finish. It is also the only way to run anything belonging to
-this problem — there is no way to time or measure your own solution.
 
 # Rules
 
 - Leave no build artifacts, binaries or caches in your working directory. Build
   in a temporary directory if you need to.
-- Do not edit anything outside your working directory and the parent copies.
+- Do not edit anything outside your working directory.
 - Directory and environment variable changes are not persistent. Every `bash`
   call runs in a new subshell, starting in your working directory. Prefix a call
   with `MY_ENV_VAR=MY_VALUE cd /path/to/dir && ...` if you need either to stick.
-- If you get stuck and cannot produce a valid solution, run
-  `echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT` on its own to give up.
+- Call `validate` whenever you want to know whether your work holds up. It
+  answers valid or invalid and prints diagnostics, and it does not end your turn.
+  It is also the only way to run anything belonging to this problem — there is no
+  way to time or measure your own solution.
+- Call `remember` when you learn something the next agent would want to know
+  before it starts. It has none of your context and cannot see this turn.
+- Call `done` when your work is valid and differs from what you found here. Call
+  `give_up` rather than burning steps on something you cannot get to work.
 
 <system_information>
 {{system}} {{release}} {{version}} {{machine}}
@@ -103,62 +97,40 @@ class AgentGenerator(Generator):
         # Imported here so the core stays importable without mini-swe-agent.
         from minisweagent.agents.default import DefaultAgent
 
-        from .._mini_swe_agent import (
-            SYSTEM_TEMPLATE,
-            ValidateTerminatesEnvironment,
-            build_model,
-        )
+        from .._mini_swe_agent import SYSTEM_TEMPLATE, ToolEnvironment, build_model
 
+        # Taken after the parent has been copied in, so `done` refusing an
+        # unchanged tree means unchanged *relative to the parent*.
         baseline_digest = codebase_helpers.digest(context.codebase)
 
-        environment = ValidateTerminatesEnvironment(
+        environment = ToolEnvironment(
             baseline_digest=baseline_digest,
             codebase=context.codebase,
-            validate=context.validate,
             cwd=str(context.codebase),
+            remember=context.remember,
             timeout=self._limits.command_timeout_seconds,
+            validate=context.validate,
         )
 
         agent = DefaultAgent(
             build_model(self._model_name),
             environment,
-            system_template=SYSTEM_TEMPLATE,
-            instance_template=INSTANCE_TEMPLATE,
-            step_limit=self._limits.step_limit,
             cost_limit=self._limits.cost_limit,
-            wall_time_limit_seconds=self._limits.wall_time_limit_seconds,
+            instance_template=INSTANCE_TEMPLATE,
             output_path=context.log_path,
+            step_limit=self._limits.step_limit,
+            system_template=SYSTEM_TEMPLATE,
+            wall_time_limit_seconds=self._limits.wall_time_limit_seconds,
         )
 
         exit_status = self._run(agent, context)
-        self._report_unpriced(agent)
 
         return GenerationResult(
             metrics={
-                "agent_cost_usd": float(agent.cost),
                 "agent_model_calls": int(agent.n_calls),
                 "agent_validate_runs": environment.validate_runs,
             },
             tags={"exit_status": exit_status},
-        )
-
-    def _report_unpriced(self, agent: Any) -> None:
-        """Say so when a model turns out to be unpriced, rather than looking free.
-
-        Cost tracking is set to ignore errors, so an unknown model reports zero
-        instead of failing. Said once per process: repeating it every iteration
-        would bury the run's own output.
-        """
-        if agent.n_calls <= 0 or agent.cost > 0.0:
-            return
-
-        if self._model_name in _UNPRICED_MODELS:
-            return
-
-        _UNPRICED_MODELS.add(self._model_name)
-        logger.info(
-            f"litellm has no pricing for {self._model_name}, so agent_cost_usd "
-            "will read 0. Step and wall-time limits still bound each iteration."
         )
 
     def _run(self, agent: Any, context: GenerationContext) -> str:
