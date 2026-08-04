@@ -1,0 +1,469 @@
+/* Roles, not hex, everywhere below the two blocks that define them.
+
+   The score ramp is one hue, light to dark, five ordinal steps. Light mode runs
+   dark-is-best because the darkest blue is the most ink on a light surface; dark
+   mode runs light-is-best for the same reason inverted. Both were validated
+   against their own surface — the dark steps are chosen for the dark band, not
+   flipped from the light ones. */
+
+.viz-root {
+  color-scheme: light;
+
+  --surface-1: #fcfcfb;
+  --plane: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --hairline: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --accent: #2a78d6;
+  --critical: #d03b3b;
+
+  --band-0: #104281;
+  --band-1: #1c5cab;
+  --band-2: #2a78d6;
+  --band-3: #5598e7;
+  --band-4: #86b6ef;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    color-scheme: dark;
+
+    --surface-1: #1a1a19;
+    --plane: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --hairline: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --accent: #3987e5;
+    --critical: #d03b3b;
+
+    --band-0: #9ec5f4;
+    --band-1: #6da7ec;
+    --band-2: #3987e5;
+    --band-3: #256abf;
+    --band-4: #184f95;
+  }
+}
+
+:root[data-theme="dark"] .viz-root {
+  color-scheme: dark;
+
+  --surface-1: #1a1a19;
+  --plane: #0d0d0d;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --hairline: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #3987e5;
+  --critical: #d03b3b;
+
+  --band-0: #9ec5f4;
+  --band-1: #6da7ec;
+  --band-2: #3987e5;
+  --band-3: #256abf;
+  --band-4: #184f95;
+}
+
+/* --- page ---------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--plane);
+  color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 15px;
+}
+
+h2 {
+  font-size: 14px;
+}
+
+h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.muted {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the bar ------------------------------------------------------------- */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.bar .titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.bar h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.controls label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+button,
+select,
+input[type="search"] {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--axis);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover,
+select:hover {
+  border-color: var(--text-secondary);
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type="search"] {
+  width: 200px;
+}
+
+/* --- the canvas ---------------------------------------------------------- */
+
+main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+#canvas {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-1);
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+svg:active {
+  cursor: grabbing;
+}
+
+/* Tree arcs are structure, so they stay recessive; the path from the root to the
+   run's best is the one line worth following, so it gets the ink. */
+.link {
+  fill: none;
+  stroke: var(--axis);
+  stroke-width: 1.5;
+}
+
+.link.winning {
+  stroke: var(--text-secondary);
+  stroke-width: 2.5;
+}
+
+.lineage {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  opacity: 0.85;
+}
+
+.arrowhead {
+  fill: var(--accent);
+  stroke: none;
+}
+
+.card {
+  fill: var(--surface-1);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.node:hover .card {
+  stroke: var(--text-secondary);
+}
+
+.node.selected .card,
+.node.best .card {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* A node an iteration minted and then never built anything for. Hollow and
+   dashed, so it is not a colour that says "worst" — it is the absence of one. */
+.node.unattempted .card {
+  stroke: var(--axis);
+  stroke-dasharray: 4 3;
+}
+
+.node.unattempted .chip {
+  fill: none;
+  stroke: var(--axis);
+  stroke-dasharray: 3 2;
+}
+
+.node.dimmed {
+  opacity: 0.25;
+}
+
+.chip {
+  stroke: none;
+}
+
+.chip.b0 {
+  fill: var(--band-0);
+}
+
+.chip.b1 {
+  fill: var(--band-1);
+}
+
+.chip.b2 {
+  fill: var(--band-2);
+}
+
+.chip.b3 {
+  fill: var(--band-3);
+}
+
+.chip.b4 {
+  fill: var(--band-4);
+}
+
+.chip.unscored {
+  fill: none;
+  stroke: var(--axis);
+}
+
+/* Text wears text tokens. The chip beside it carries the score band; the second
+   line prints the score itself, so nothing here is colour alone. */
+.label {
+  fill: var(--text-primary);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.meta {
+  fill: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.node.dead .label,
+.node.dead .meta {
+  fill: var(--text-muted);
+}
+
+.badge {
+  fill: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.node.matched .card {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* --- the panel ----------------------------------------------------------- */
+
+#panel {
+  width: 420px;
+  flex: none;
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--surface-1);
+  border-left: 1px solid var(--hairline);
+}
+
+#panel[hidden] {
+  display: none;
+}
+
+#panel .close {
+  float: right;
+}
+
+#panel section {
+  margin-top: 18px;
+}
+
+#panel p,
+#panel li {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+#panel ol {
+  padding-left: 18px;
+  margin: 6px 0 0;
+}
+
+#panel ol li {
+  margin-bottom: 8px;
+}
+
+#panel .constraint {
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  margin: 6px 0 0;
+}
+
+#panel code,
+.path {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 4px 6px 4px 0;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+td.score {
+  color: var(--text-primary);
+}
+
+td.failed {
+  color: var(--critical);
+}
+
+/* --- the legend ---------------------------------------------------------- */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  padding: 8px 16px;
+  background: var(--surface-1);
+  border-top: 1px solid var(--hairline);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.legend .group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend .key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.legend .swatch {
+  width: 10px;
+  height: 16px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.legend .swatch.hollow {
+  background: none;
+  border: 1px dashed var(--axis);
+}
+
+.legend .swatch.ring {
+  background: none;
+  border: 2px solid var(--accent);
+}
+
+.legend .rule {
+  width: 22px;
+  border-top: 2px dashed var(--accent);
+  display: inline-block;
+}

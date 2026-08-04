@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "optiverse-viz"
+version = "0.0.1"
+description = "A browser view of an optiverse run's node graph"
+authors = [{ name = "Mathieu Larose", email = "mathieu@mathieularose.com" }]
+license = "GPL-3.0"
+requires-python = ">=3.10"
+# The parent, and nothing else. This is a separate distribution precisely so
+# that `optiverse` never grows a dependency for the sake of a report: whatever
+# this needs, it needs on its own.
+dependencies = ["optiverse"]
+
+[project.optional-dependencies]
+dev = ["black==25.1.0", "pyright==1.1.403"]
+
+[tool.setuptools]
+packages = ["optiverse_viz"]
+
+# d3 is vendored rather than fetched, so the page works offline and a checkout
+# five years from now still renders. `assets/d3.LICENSE` travels with it.
+[tool.setuptools.package-data]
+optiverse_viz = ["assets/*"]
+
+[tool.black]
+target-version = ['py310']
+
+[tool.pyright]
+include = ["optiverse_viz"]
+# The parent is installed editable, which pyright follows as far as an untyped
+# library — every symbol it exports then reads as Unknown and strict mode fails
+# on all of them. Pointed at the checkout instead, it reads the same annotated
+# source the parent's own pyright run checks.
+extraPaths = [".."]
+pythonVersion = "3.10"
+typeCheckingMode = "strict"
+reportMissingImports = true
+reportUnusedImport = true
+reportUnusedVariable = true

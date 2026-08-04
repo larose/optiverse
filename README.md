@@ -198,6 +198,24 @@ No evaluator log is kept, since re-running one beats a stale copy:
 solution directory with no `metadata.json` belongs to an attempt that died after
 the codebase was allocated; it is ignored and left for you to inspect.
 
+### Seeing the tree
+
+`viz/` draws a run as one zoomable HTML page — the tree with its constraints, the
+score at every node, and the code lineage over the top, which is where two lines
+of work combining is visible at all. It is a separate distribution that depends
+on `optiverse` rather than the other way round, so the loop still ships with one
+dependency:
+
+```bash
+make -C viz init
+make -C viz run RUN=tmp/20260730_133833
+```
+
+That writes `<run>/viz/index.html` and prints the path. The file is
+self-contained — the vendored d3, the script, the style and the run's data are
+all inlined — so it opens over `file://` with the network off and can be copied
+somewhere else on its own.
+
 ## Defining your own problem
 
 A problem is a seed codebase, a description, and an evaluator command:

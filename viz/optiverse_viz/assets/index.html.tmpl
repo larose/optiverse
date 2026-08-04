@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>optiverse — $title</title>
+    <style>
+$style
+    </style>
+  </head>
+  <body class="viz-root">
+    <header class="bar">
+      <div class="titles">
+        <h1 id="run-title"></h1>
+        <p id="run-summary" class="muted"></p>
+      </div>
+      <div class="controls">
+        <input
+          id="filter"
+          type="search"
+          placeholder="filter constraints"
+          aria-label="filter nodes by constraint text"
+        />
+        <label
+          >lineage
+          <select id="lineage-mode" aria-label="which lineage edges to draw">
+            <option value="cross">cross-branch</option>
+            <option value="all">all</option>
+            <option value="none">none</option>
+          </select>
+        </label>
+        <button type="button" data-zoom="out" aria-label="zoom out">−</button>
+        <button type="button" data-zoom="in" aria-label="zoom in">+</button>
+        <button type="button" data-zoom="fit">fit</button>
+        <button type="button" id="theme">theme</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="canvas">
+        <svg id="tree" role="img" aria-label="the run's tree of ideas"></svg>
+      </div>
+      <aside id="panel" hidden></aside>
+    </main>
+
+    <footer id="legend" class="legend"></footer>
+
+    <script>
+$d3
+    </script>
+    <script id="run-data" type="application/json">
+$data
+    </script>
+    <script>
+$script
+    </script>
+  </body>
+</html>
