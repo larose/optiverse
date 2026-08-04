@@ -45,9 +45,9 @@ packages = [
     "optiverse.solution",
 ]
 
-# The playbook is data, not code, so it is not installed unless it is named.
+# The kicks are data, not code, so they are not installed unless named.
 [tool.setuptools.package-data]
-"optiverse.search" = ["playbook.md"]
+"optiverse.search" = ["kicks.md"]
 
 [tool.black]
 target-version = ['py310']

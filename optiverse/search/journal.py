@@ -5,34 +5,32 @@ which node was worked when, whether the last eight moves all landed in one
 subtree, whether anything has beaten the incumbent this hour. A tree read without
 that is read the same way twice in a row, which is what a loop is.
 
-Nothing is stored for this. `iterations/NNNNN/plan.json` is what the director
-wrote and `solutions/<id>/metadata.json` is what came back, and the join between
-them is the iteration number both already carry. A journal file would be a third
-copy of facts that already exist, and the only one of the three that could be
-wrong.
+Nothing is stored for this and nothing needs to be. Every solution carries its
+node and its iteration, every constraint is an arc, and a perturbation mints a
+node and works it in the same iteration — so the phase, the constraint and the
+node a perturbation was hung under are all readable off the two files the run
+already keeps. There was once a `plan.json` beside each iteration holding the
+same facts; it existed only because the director used to *choose* them, and it
+went when the choosing did.
 
-Both sides of that join are total, which is why nothing here reads defensively. A
-plan is applied only once it validates, and an iteration commits a solution only
-once its plan was applied — so a committed solution is the evidence that a valid
-plan sits beside it, with every field this reads already checked.
-
-Only the plan reads are windowed. Everything measured over the whole run — the
-epochs, the drought, what the last dozen iterations spent themselves on — comes
-from the solutions, which the store has already read.
+That leaves this module a function of the solutions and the tree, with one
+directory listing in it: the crashed-attempt count, which lives in the names of
+the directories themselves and nowhere else.
 """
 
-import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set, cast
 
-from .graph import ROOT_NODE_ID
+from .graph import ROOT_NODE_ID, Graph
+from .policy import Phase, phase_of
 from ..solution import Solution
 
 ITERATIONS_DIRECTORY_NAME = "iterations"
-PLAN_NAME = "plan.json"
-MEMORY_NAME = "memory.md"
+
+# The director's whole output. A constraint is prose, so it is a prose file.
+CONSTRAINT_NAME = "constraint.md"
 
 # What each agent was shown and what it did. Named here with the rest of the
 # layout rather than beside the code that writes them, because the prompt tells
@@ -55,25 +53,16 @@ ITERATION_NUMBER_WIDTH = 5
 # any single idea's run of attempts — which is the span a loop hides in.
 LEDGER_LENGTH = 20
 
-# Moves shown with their reasoning and expectation in full: the one being
-# reconciled, and two before it. Two is enough to see a pattern without paying
-# for a fourth paragraph.
-DETAILED_MOVES = 3
-
 # The whole run, however long, in this many lines. A line count rather than a
 # block size is what keeps the section the same height at iteration 40 and at
 # iteration 4000.
 EPOCH_LINES = 10
 
-# The span the stagnation signals are measured over. Four times the staleness
-# limit: long enough that a node taking its three fair samples does not read as a
-# rut, short enough that a rut is caught while there is still budget to spend
-# differently.
+# The span the stagnation signals are measured over. Four times the patience a
+# node is given: long enough that a node taking its three fair samples does not
+# read as a rut, short enough that a rut is caught while there is still budget to
+# spend differently.
 WINDOW = 12
-
-# Plans read per iteration. The ledger needs its own length and the signals need
-# the window; one more covers the move being reconciled when both are short.
-_DEPTH = max(LEDGER_LENGTH, WINDOW) + 1
 
 # Constraint text in a one-line ledger entry. Long enough to recognise an idea,
 # short enough that the score stays in the same column.
@@ -94,36 +83,32 @@ def iteration_directory(directory: Path, iteration: int) -> Path:
 
 @dataclass(frozen=True)
 class Move:
-    """One iteration: what the director wrote, and what came back."""
+    """One iteration: what the search did, and what came back.
+
+    Every field is read off the solution and the tree. `constraint` and
+    `base_node_id` are set only on a perturbation, and both come from the arc
+    that perturbation created — the constraint is what the arc carries, and the
+    base is the arc's parent, since a perturbation hangs a *child* under it.
+    """
 
     iteration: int
-
-    parent_node_id: str
-    parent_solution_id: str
-    constraint: Optional[str]
-    """The constraint this move added, or None when it re-ran the node it named.
-    When it is set, the solution landed on the child it created rather than on
-    `parent_node_id`."""
-
-    verdict: str
-    reasoning: str
-    expectation: str
-    """What the director said it expected. Read back beside the score next
-    iteration, which is the only reason it is worth writing."""
-
+    phase: Phase
     solution: Solution
 
+    constraint: Optional[str]
+    base_node_id: Optional[str]
+
     crashes: int
-    """Attempts at this iteration that were set aside before one landed. A
-    director that needed three goes at a number is worth knowing about, and
-    nothing else in the run says so."""
+    """Attempts at this iteration that were set aside before one landed. An
+    iteration that needed three goes is worth knowing about, and nothing else in
+    the run says so."""
 
     improved_run_best: bool
     run_best_after: Optional[float]
 
     @property
     def node_id(self) -> str:
-        """Where the work actually happened."""
+        """Where the work happened."""
         return self.solution.node_id
 
     @property
@@ -154,19 +139,21 @@ class Progress:
 
 
 class Journal:
-    """What the search has been doing, joined from the run directory."""
+    """What the search has been doing, derived from the run directory."""
 
     def __init__(
         self,
         *,
         directory: Path,
+        graph: Graph,
         solutions: Sequence[Solution],
         before: int,
     ) -> None:
         self._directory = Path(directory)
+        self._graph = graph
 
-        # `before` is the iteration being planned. Its directory exists and holds
-        # no plan yet, so bounding the read is clearer than tolerating a gap.
+        # `before` is the iteration being planned. Nothing has landed for it yet,
+        # so bounding the read is clearer than tolerating a gap.
         self._history = sorted(
             (s for s in solutions if s.iteration is not None and s.iteration < before),
             key=lambda s: cast(int, s.iteration),
@@ -181,7 +168,7 @@ class Journal:
         self._seed_best = self._seed.score if self._seed else None
 
         self._first_seen = _first_seen(self._history)
-        self._moves = self._read(self._history[-_DEPTH:])
+        self._moves = self._read(self._history)
 
     # --- what happened -------------------------------------------------------
 
@@ -190,8 +177,6 @@ class Journal:
         return self._moves[-count:] if count > 0 else []
 
     def last(self) -> Optional[Move]:
-        """The move being reconciled this iteration. Every move carries an
-        expectation, so there is no separate notion of the last prediction."""
         return self._moves[-1] if self._moves else None
 
     def progress(self) -> Progress:
@@ -291,16 +276,25 @@ class Journal:
         return lines
 
     def render_ledger(self, count: int = LEDGER_LENGTH) -> List[str]:
-        """One line per iteration, oldest first."""
+        """One line per iteration, oldest first.
+
+        The phase is named on every line rather than left to be inferred from a
+        node id that changed. A run of local searches under one node is what
+        progress looks like when it is working and what a rut looks like when it
+        is not, and either way it should be countable at a glance.
+        """
         lines: List[str] = []
 
         for move in self.moves(count):
             marker = "*" if move.improved_run_best else " "
 
-            if move.constraint is None:
-                action = "repeat"
+            if move.phase is Phase.PERTURB:
+                action = (
+                    f"perturb under {move.base_node_id}: "
+                    f'"{_short(move.constraint or "")}"'
+                )
             else:
-                action = f'new under {move.parent_node_id}: "{_short(move.constraint)}"'
+                action = "local search"
 
             crashed = ""
             if move.crashes:
@@ -314,101 +308,14 @@ class Journal:
 
         return lines
 
-    def render_detail(self, count: int = DETAILED_MOVES - 1) -> List[str]:
-        """The moves before the last one, with the prose the director wrote.
-
-        The last is left out because it gets a section of its own: it is the one
-        with a result still to be read against, and reading it is the first thing
-        the task asks for.
-
-        A move's verdict lives in the *next* plan, because a verdict is written
-        once the result is in. So each entry closes with the following
-        iteration's, which is where a director sees whether it argued with an
-        outcome or waved at it.
-        """
-        if count <= 0 or len(self._moves) < 2:
-            return []
-
-        start = max(0, len(self._moves) - 1 - count)
-        lines: List[str] = []
-
-        for index in range(start, len(self._moves) - 1):
-            move = self._moves[index]
-
-            if lines:
-                lines.append("")
-
-            lines.append(f"  {move.iteration}  at {move.node_id}, {_score(move.score)}")
-            lines.append(f"    reasoning: {move.reasoning}")
-            lines.append(f"    expectation: {move.expectation}")
-            lines.append(f"    you then said: {self._moves[index + 1].verdict or '—'}")
-
-        return lines
-
-    def render_prediction(self) -> List[str]:
-        """The last move as prediction beside outcome.
-
-        Written as a paragraph rather than a table because it is the one thing in
-        the prompt the director is asked to argue with, and a table invites being
-        skimmed.
-        """
-        move = self.last()
-
-        if move is None:
-            return ["Nothing has been tried yet, so there is nothing to reconcile."]
-
-        if move.constraint is None:
-            what = f"you re-ran {move.node_id}"
-        else:
-            what = (
-                f'you added "{move.constraint}" to {move.parent_node_id}, '
-                f"creating {move.node_id}"
-            )
-
-        lines = [
-            f"At iteration {move.iteration} {what}, starting from "
-            f"{move.parent_solution_id}, and you wrote:",
-            "",
-            f"  {move.expectation}",
-            "",
-        ]
-
-        if move.score is None:
-            lines.append(f"What came back: nothing. {move.solution.id} did not score.")
-        else:
-            outcome = f"What came back: {_score(move.score)} at {move.node_id}."
-
-            if move.improved_run_best:
-                outcome += " A new run best."
-            elif move.run_best_after is not None:
-                # Named rather than left implicit: a score is only good or bad
-                # against something, and the thing it is against is the one
-                # number this section would otherwise make the director go and
-                # look up.
-                outcome += f" It did not beat {_score(move.run_best_after)}."
-
-            lines.append(outcome)
-
-        metrics = _metric_summary(move.solution)
-        if metrics:
-            lines.append(f"Metrics: {metrics}")
-
-        lines += [
-            "",
-            "Say what that did to the expectation before you decide anything. It goes "
-            "in `verdict`.",
-        ]
-
-        return lines
-
     # --- reading -------------------------------------------------------------
 
     def _read(self, solutions: Sequence[Solution]) -> List[Move]:
         crashes = self._crash_counts()
         running = self._seed_best
 
-        # Replayed over the whole history rather than the window, so the first
-        # move in the window knows whether it improved on everything before it.
+        # Replayed over the whole history rather than a window, so the first move
+        # shown knows whether it improved on everything before it.
         improved: Dict[int, bool] = {}
         after: Dict[int, Optional[float]] = {}
 
@@ -429,18 +336,24 @@ class Journal:
 
         for solution in solutions:
             iteration = cast(int, solution.iteration)
-            plan = self._plan(iteration)
+            phase = phase_of(solution, self._first_seen)
+            node = (
+                self._graph.node(solution.node_id)
+                if solution.node_id in self._graph
+                else None
+            )
 
             moves.append(
                 Move(
                     iteration=iteration,
-                    parent_node_id=str(plan.get("parent_node_id", "")),
-                    parent_solution_id=str(plan.get("parent_solution_id", "")),
-                    constraint=_optional(plan.get("constraint")),
-                    verdict=str(plan.get("verdict", "")),
-                    reasoning=str(plan.get("reasoning", "")),
-                    expectation=str(plan.get("expectation", "")),
+                    phase=phase,
                     solution=solution,
+                    constraint=(
+                        node.constraint if node and phase is Phase.PERTURB else None
+                    ),
+                    base_node_id=(
+                        node.parent_node_id if node and phase is Phase.PERTURB else None
+                    ),
                     crashes=crashes.get(iteration, 0),
                     improved_run_best=improved[iteration],
                     run_best_after=after[iteration],
@@ -448,11 +361,6 @@ class Journal:
             )
 
         return moves
-
-    def _plan(self, iteration: int) -> Dict[str, object]:
-        path = iteration_directory(self._directory, iteration) / PLAN_NAME
-
-        return cast(Dict[str, object], json.loads(path.read_text()))
 
     def _crash_counts(self) -> Dict[int, int]:
         """How many attempts each iteration number needed, from the names.
@@ -482,9 +390,10 @@ class Journal:
 def _first_seen(solutions: Sequence[Solution]) -> Dict[str, int]:
     """The iteration each node first held a solution.
 
-    A node is minted and worked in the same iteration, so its earliest solution
-    dates it. Nodes minted by an attempt that then crashed hold none and are
-    absent, which is right: an idea nothing was ever built for was not tried.
+    A perturbation mints a node and works it in the same iteration, so a node's
+    earliest solution both dates it and marks which attempt was the perturbation.
+    Nodes minted by an attempt that then crashed hold none and are absent, which
+    is right: an idea nothing was ever built for was not tried.
     """
     first: Dict[str, int] = {}
 
@@ -513,16 +422,6 @@ def _best_solution(solutions: Iterable[Solution]) -> Optional[Solution]:
         return None
 
     return min(scored, key=lambda s: cast(float, s.score))
-
-
-def _metric_summary(solution: Solution, limit: int = 4) -> str:
-    names = sorted(solution.metrics)[:limit]
-
-    return ", ".join(f"{name} {solution.metrics[name]:.6g}" for name in names)
-
-
-def _optional(value: object) -> Optional[str]:
-    return value if isinstance(value, str) else None
 
 
 def _score(score: Optional[float]) -> str:

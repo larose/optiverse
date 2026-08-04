@@ -48,7 +48,9 @@ class PromptContext:
 
     constraints: Sequence[str]
     """Every constraint in force at the node this candidate belongs to, root
-    first. Empty at the root, which is the whole space."""
+    first. Never empty: the search only ever works nodes that carry at least one
+    constraint, because a node with none would leave this prompt with no
+    instruction in it at all."""
 
 
 def build(context: PromptContext) -> str:
@@ -78,6 +80,10 @@ def build(context: PromptContext) -> str:
 
 
 def _constraints(context: PromptContext) -> List[str]:
+    # A guard, not a case. Only the root has no constraints and the search never
+    # works it — so reaching this means the whole instruction has gone missing,
+    # and a section header standing over nothing would hide that rather than
+    # show it.
     if not context.constraints:
         return []
 

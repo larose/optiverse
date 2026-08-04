@@ -332,7 +332,7 @@ class Graph:
             here = "+" if _holds(node, best_solution_id) else "-"
 
             lines.append(f'{indent}{here} {node.id}  "{label}"')
-            lines.append(f"{indent}  {_stats(node)}")
+            lines.append(f"{indent}  {stats(node)}")
             lines.extend(
                 f"{indent}    {line}"
                 for line in _solution_lines(
@@ -390,7 +390,14 @@ def _holds(node: Node, solution_id: Optional[str]) -> bool:
     return solution_id is not None and any(s.id == solution_id for s in node.solutions)
 
 
-def _stats(node: Node) -> str:
+def stats(node: Node) -> str:
+    """One line saying how a node has done.
+
+    Public because it has two readers: the tree the prompt renders, and the one
+    `optiverse.search.tree` prints in full. A second phrasing of "best, median,
+    stale" is a second thing to keep in step for no gain — and worse, it would
+    let the glance and the full dump describe the same node differently.
+    """
     attempts = len(node.solutions)
     plural = "" if attempts == 1 else "s"
     scores = sorted(node.scores)
@@ -513,10 +520,10 @@ class ArcStore:
 def current_node(graph: Graph, solutions: Sequence[Solution]) -> str:
     """Where the search is sitting: the node of the last solution committed.
 
-    The dead check and the playbook trigger both need a node before the director
-    has chosen one, and the search sits where it last was. Before there is a
-    solution, that is the root — and so is a node the arcs no longer describe,
-    which is not worth crashing the prompt over.
+    This is what the policy reads to decide whether to search locally or perturb:
+    a local search continues wherever the last attempt landed. Before there is a
+    solution that is the root — and so is a node the arcs no longer describe,
+    which is not worth crashing a run over.
     """
     ordered = [s for s in solutions if s.iteration is not None]
 

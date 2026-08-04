@@ -1,14 +1,14 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import Dict, Union, cast
 
 from .solution import codebase as codebase_helpers
 from .config import OptimizerConfig
 from .evaluator import SCORE, EvaluatorError, ScoreResult
 from .programmer import ProgrammerContext
 from .programmer import prompt as programmer_prompt
-from .search import Search
+from .search import Phase, Search
 from .search.graph import ROOT_NODE_ID
 from .solution import FileSystemStore, Solution
 
@@ -30,22 +30,43 @@ class Optimizer:
         self._search = Search(
             directory=config.directory,
             director=config.director,
-            playbook=config.playbook,
+            kicks=config.kicks,
             store=self._store,
         )
 
     def _do_iteration(self, iteration: int) -> None:
-        search_result = self._search.decide(
-            iteration=iteration,
-            problem_description=self._config.problem.description,
-        )
-        plan = search_result.plan
+        """One iteration, in the order the design depends on.
 
-        if plan is None:
-            # Raised before anything is allocated, so a planless iteration leaves
-            # no half-made solution directory behind at all.
-            status = search_result.tags.get("director_exit_status", "unknown")
-            raise IterationFailed(f"the director wrote no usable plan ({status})")
+        The move is settled before anything is spent: which node is worked, and
+        which solution's code the programmer opens on. Only a perturbation costs
+        a director call, and only a perturbation can fail here — a local search
+        has nothing to decide and so has nothing to get wrong.
+        """
+        self._search.begin(iteration)
+
+        move = self._search.next_move(iteration)
+        node_id = move.base.id
+
+        metrics: Dict[str, Union[int, float]] = {}
+        tags: Dict[str, Union[int, str]] = {"phase": move.phase.value}
+
+        if move.phase is Phase.PERTURB:
+            perturbation = self._search.perturb(
+                iteration, move, self._config.problem.description
+            )
+
+            metrics.update(perturbation.metrics)
+            tags.update(perturbation.tags)
+
+            if perturbation.node_id is None:
+                # Raised before anything is allocated, so an iteration with no
+                # constraint leaves no half-made solution directory behind.
+                status = tags.get("director_exit_status", "unknown")
+                raise IterationFailed(
+                    f"the director wrote no usable constraint ({status})"
+                )
+
+            node_id = perturbation.node_id
 
         # Allocate first, so the programmer works directly in the solution's final
         # home. There is no scratch directory and nothing to copy back.
@@ -56,13 +77,11 @@ class Optimizer:
         # The programmer opens on the code it improves rather than copying it in
         # itself, which is one thing fewer to get wrong and makes "you changed
         # nothing" a fact the environment can check.
-        codebase_helpers.materialize(
-            self._store.codebase_path(plan.parent_solution_id), codebase
-        )
+        codebase_helpers.materialize(move.parent_solution.codebase, codebase)
 
         prompt = programmer_prompt.build(
             programmer_prompt.PromptContext(
-                constraints=self._search.constraints(plan.node_id),
+                constraints=self._search.constraints(node_id),
                 problem_description=self._config.problem.description,
             )
         )
@@ -82,12 +101,16 @@ class Optimizer:
         self._store.commit(
             solution_id,
             iteration=iteration,
-            metrics={**score_result.metrics, **programmer_result.metrics},
-            node_id=plan.node_id,
-            parent_solution_id=plan.parent_solution_id,
+            metrics={
+                **metrics,
+                **score_result.metrics,
+                **programmer_result.metrics,
+            },
+            node_id=node_id,
+            parent_solution_id=move.parent_solution.id,
             score=score_result.score,
             started_at=started_at,
-            tags={**search_result.tags, **programmer_result.tags},
+            tags={**tags, **programmer_result.tags},
         )
 
         if score_result.score is None:
@@ -161,7 +184,9 @@ class Optimizer:
         name that says so and the same number is tried again, which is already
         what resume assumes. That is deliberately unbounded — a director that is
         broken rather than unlucky will retry forever, in plain sight, rather
-        than quietly spending the budget on something else.
+        than quietly spending the budget on something else. A retry decides the
+        same way as the attempt it replaces, because the policy draws from the
+        iteration number.
 
         Iterations are numbered from 1, and it is the loop that counts that way
         rather than each place the number is displayed. The same value reaches the

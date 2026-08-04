@@ -19,8 +19,8 @@ DeepMind's [AlphaEvolve](https://deepmind.google/discover/blog/alphaevolve-a-gem
 established the premise: an LLM inside an evolutionary loop reaches algorithms
 that neither the model alone nor the search alone finds. In Optiverse, a coding
 agent with a shell writes each candidate, rather than a model editing regions
-marked inside a file. That agent is the **programmer**; the one that decides what
-it works on is the **director**.
+marked inside a file. That agent is the **programmer**; the one that invents the
+idea it works on is the **director**.
 
 ## How it works
 
@@ -30,63 +30,82 @@ deleted.
 **The evaluator is the objective.** Nothing else measures a candidate, not the
 programmer that wrote it and not the model behind it.
 
-**The search is driven by an agent too.** A **director** with a shell and the run
-directory reads whatever it needs — a candidate's source, a programmer's
-trajectory, the raw graph — and decides what to try next.
-
 **The search space is a tree of ideas.** A *constraint* is prose telling the
 programmer how to narrow its approach, and it sits on an **arc**. A **node** is
 everything accumulated from the root down to it, so a node is an idea and going
 deeper is committing to one more thing. The root has no constraints at all.
 
-Each iteration:
+**The search is an iterated local search over that tree.** Where it goes is
+decided by code, not by a model:
 
-1. The director names a node to work under, names a solution whose code the
-   programmer starts from, and may add one constraint — which creates a child of
-   that node and works there instead. **That is the whole of what it can say to
-   the programmer.** There is no free-form brief: if it wants the programmer to
-   do something, that is a constraint, and a constraint is a node. Beside that it
-   writes three pieces of prose for itself — see below.
-2. The chosen solution's code is copied into the programmer's working directory,
-   and it changes it. It has three tools — `bash`, `validate` and `give_up` — and
-   its turn ends when `validate` reports valid on something it changed.
-3. Optiverse scores the result and files it under the node it belongs to.
+- **Local search.** Re-run the node the search is sitting on, starting from that
+  node's best code. The programmer handed the same constraints twice writes
+  something different both times and the node keeps the best of it, so repeating
+  a node *is* a descent — and against a noisy evaluator it is also how a node
+  earns a spread instead of a single point. This costs no director call at all.
+- **Perturbation.** Once a node has made three attempts without beating its own
+  best, that descent is over. A node is drawn **uniformly at random** from every
+  node with a score under it, the director is asked for one constraint, and that
+  constraint becomes a new child of the drawn node.
 
-The node and the solution are chosen separately and need not match. A node the
-director has just created holds no solutions at all, and even one that does may
-not hold the best code to build on — which is how a tree of ideas still lets two
-lines of work combine.
+The draw does not favour the incumbent, and that is the point. A search that
+always builds on its best is how four hundred iterations go into polishing one
+branch. Every draw is seeded on the iteration number, so a run is reproducible
+and a retried iteration decides exactly as the attempt it replaces did.
+
+The root is branched from but never worked, so iteration 1 is a perturbation and
+the tree has an idea in it before any code is written. A node with no constraints
+would leave the programmer's prompt with no instruction in it at all, and the
+root is not an idea — it is the absence of one. Every candidate the search
+produces therefore sits under at least one constraint.
+
+**The director writes one file.** A **director** with a shell and the run
+directory reads whatever it needs — a candidate's source, a programmer's
+trajectory, the whole tree — and writes `constraint.md`. **That is the whole of
+what it can say.** There is no free-form brief and nothing else it might have
+said is kept, because nothing else is read back. If it wants the programmer to do
+something, that is a constraint, and a constraint is a node — so the tree is the
+complete record of the search rather than half of it.
+
+It is not asked *where* to work. The node its idea hangs under and the code the
+programmer opens on are both already drawn, and the prompt says plainly that the
+node was drawn at random — a director told only which node it is standing on
+reaches for a reason it is standing there, and inventing one turns a random
+restart back into the exploitation it was meant to replace.
+
+Then the drawn solution's code is copied into the programmer's working directory
+and it changes it. It has three tools — `bash`, `validate` and `give_up` — and its
+turn ends when `validate` reports valid on something it changed. Optiverse scores
+the result and files it under the node it belongs to.
+
+The starting code is always the base node's own best, so the programmer opens on
+code that already satisfies the constraints it is about to be given.
 
 The director sees every score; the programmer sees none — not its own, not its
 parent's. Ranking is the director's job, and a programmer that could see a score
 would abandon a novel approach the moment it looked worse than the incumbent.
 
-**The director predicts before it measures.** Every plan carries a `reasoning`
-and an `expectation` alongside the decision, and the next iteration opens with
-that expectation and the score it got, and a `verdict` field to answer it in. A
-director shown only a tree reads the same tree the same way every time, which is
-what a loop is; one shown what it said last time and what happened has something
-to disagree with. Scoring is noisy, so the prediction has to be written before
-the number arrives for it to be worth anything.
-
-**The director keeps a notebook.** `memory.md` is its model of the problem — what
-this problem rewards, what is settled, what is a dead end and why. It is
-rewritten rather than appended, it is the director's alone, and it never reaches
-the programmer, because beliefs about what scores well cannot go to something
-deliberately kept ignorant of scores. Every so often — on a schedule the director
-does not set, and whenever the run stalls — an iteration becomes a **review**: it
-has to go and read something the prompt did not show it, and write the notebook
-back, before it may plan.
+**Half of perturbations come with a kick.** A kick is one entry drawn from
+`kicks.md` — borrow from another domain, invert an assumption every branch
+shares, cross two branches, do the dumb thing well. It is a way in rather than an
+order, and it says nothing about the problem, only about how to look at one. The
+other half say nothing: write a constraint.
 
 **The deep past is put back in front of it.** A run of eight hundred iterations
 has a tree too large to print, so the prompt shows the eight ideas that scored
-best and eight more on a rotation that advances every iteration. Every constraint
-ever written comes round on a fixed cycle. That is the raw exposure; deciding
-which of it matters is what the notebook is for.
+best and eight more on a rotation that advances every iteration. That is passive
+exposure; deliberate exploration is one command, and the task asks for it:
 
-Nothing the programmer works out survives its turn. What carries between
-iterations is the tree, the scores, the code, and the two things the director
-wrote for itself.
+```bash
+python3 -m optiverse.search.tree <run directory> [node id]
+```
+
+which prints every node, every constraint in full and every attempt, with nothing
+folded away.
+
+Nothing the programmer works out survives its turn, and nothing the director
+works out survives its turn either. What carries between iterations is the tree,
+the scores and the code.
 
 ## Quick start
 
@@ -143,39 +162,50 @@ Each run writes to `tmp/YYYYMMDD_HHMMSS`, named for when it started:
 ```
 tmp/20260730_133833/
   arcs.json                         the tree: (parent, child, constraint) triplets
-  memory.md                         what the director currently believes
   solutions.csv                     the population, best score first
   solutions/s_<id>/
     code/                           the solution itself
     metadata.json                   score, metrics, tags, timing, and its lineage
-  iterations/00001/
+  iterations/00001/                 a perturbation — the first always is
     director-prompt.md              what the director was shown
     director.log                    what it did
-    plan.json                       what it decided, why, and what it expected
-    memory.md                       its notebook as of this iteration, if it wrote one
+    constraint.md                   the constraint it wrote
     programmer-prompt.md            what the programmer was shown
     programmer.log                  what it did
-  iterations/00002_crashed_1/       an attempt that died, set aside intact
+  iterations/00002/                 a local search — no director ran
+    programmer-prompt.md
+    programmer.log
+  iterations/00003_crashed_1/       an attempt that died, set aside intact
 ```
 
 `iterations/` holds the process, `solutions/` holds the product. Every file is
 either a primary fact or a verbatim artifact — nothing is derived and saved, so
-there is nothing that can drift out of step with what actually happened. That
-includes the run's history: what the search *did*, as opposed to what its tree
-looks like, is the join of each `plan.json` against the solution its iteration
-committed, on the iteration number both already carry.
+there is nothing that can drift out of step with what actually happened.
+
+The run's whole state is `arcs.json` plus the solutions. What the search *did*,
+as opposed to what its tree looks like, is read back off those two: the
+constraint is the arc, the node a perturbation hung under is that arc's parent,
+and the phase is derivable because a perturbation mints a fresh node and works it
+in the same iteration. There is nothing else to store, so there is nothing else
+that could be wrong.
 
 Start with the newest `director-prompt.md`. It carries the tree with attempts and
-scores, and it is exactly what the director read — so a search that is
-unreadable to you was unreadable to it. To read one without spending a run:
+scores, and it is exactly what the director read — so a search that is unreadable
+to you was unreadable to it. To read one without spending a run:
 
 ```bash
 python3 -m optiverse.search.preview tmp/20260730_133833 [iteration]
 ```
 
-`git diff` across `iterations/*/memory.md` is the other thing worth reading. It
-is the director's model of the problem changing, and a notebook that only ever
-grows is a director that is not actually thinking.
+Run it over consecutive iteration numbers to watch the base node and the kick
+actually vary, and over the same number twice to watch them not.
+
+The other thing worth reading is the tree in full, which is what the director
+itself is told to do first:
+
+```bash
+python3 -m optiverse.search.tree tmp/20260730_133833
+```
 
 In `solutions.csv`, every metric an evaluator returns becomes an `m_*` column and
 every tag a programmer or director sets becomes a `t_*` column, so problem-specific
@@ -190,10 +220,11 @@ file: every iteration produces exactly one solution and `metadata.json` is
 written last, so the highest `iteration` among committed solutions is where the
 run picks up. An iteration that produced no solution did not happen: whatever it
 left behind is renamed `iterations/NNNNN_crashed_1` — beside the original, so it
-is hard to miss — and the same number is attempted again. There is deliberately
-no fallback plan. Substituting one gave a byte-identical brief every time the
-director was down, so a broken run kept paying for candidates that re-derived
-what it already had; now it retries in plain sight instead.
+is hard to miss — and the same number is attempted again, drawing the same base
+node and the same kick, since both come from the iteration number. There is
+deliberately no fallback constraint. Substituting one gave a byte-identical brief
+every time the director was down, so a broken run kept paying for candidates that
+re-derived what it already had; now it retries in plain sight instead.
 
 ```bash
 DIRECTORY=tmp/20260730_133833 make run.tsp
@@ -233,15 +264,13 @@ Each reads its own model variable — `OPTIVERSE_PROGRAMMER_MODEL` and
 `OPTIVERSE_DIRECTOR_MODEL` — falling back to `OPTIVERSE_MODEL`, so planning and
 coding can use different models without it being two variables until you care.
 
-The director is also given a **playbook**: angles for inventing a constraint the
-search has not tried, such as borrowing from another domain or inverting an
-assumption every node shares. It appears only once the run has stopped paying
-off, since that is the moment a new constraint is the way out and any earlier it
-is noise — and then it appears whole. Naming one angle at random cost the run its
-reproducibility and, with nothing recording what had been shown, could name the
-same one for the rest of a thousand iterations. It ships as
-`optiverse/search/playbook.md`, and `OptimizerConfig.playbook` points somewhere
-else if you want your own.
+The **kicks** ship as `optiverse/search/kicks.md`, and `OptimizerConfig.kicks`
+points somewhere else if you want your own. One is drawn at random on half of
+perturbations. Drawing rather than showing the list whole is deliberate: twenty
+at once is a menu the model skims for the one it already wanted. Drawing is safe
+here because the generator is seeded on the iteration number and the drawn kick
+is written into that iteration's `director-prompt.md`, so the run stays
+reproducible and there is a record of what was shown.
 
 ### The evaluator contract
 
@@ -301,8 +330,9 @@ named after:
 optiverse/
   optimizer.py       the loop
   config.py          what you hand it
-  search/            the tree of ideas, the run's history, and the director's prompt
-  director/          the planning seam, and the agent that fills it
+  search/            the tree of ideas, the policy that moves over it, the run's
+                     history, and the director's prompt
+  director/          the idea seam, and the agent that fills it
   programmer/        the writing seam, the agent that fills it, and its prompt
   solution/          what a candidate is and where it is kept
   evaluator/         the process contract, and a helper for Python evaluators

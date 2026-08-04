@@ -31,16 +31,17 @@ logger = logging.getLogger(__name__)
 MODEL_VARIABLE = "OPTIVERSE_DIRECTOR_MODEL"
 FALLBACK_MODEL_VARIABLE = "OPTIVERSE_MODEL"
 
-# Matched to the programmer's, and for the same reason: the job is no longer only
-# to pick a direction. On a review the director reads a candidate it has not seen,
-# reconciles the last prediction, and rewrites its notebook before it decides —
-# and a budget sized for choosing from a list would cut it off mid-thought.
+# Matched to the programmer's, and for the same reason: the job is not to pick
+# from a list. The director walks the tree, reads a candidate it has not seen and
+# a trajectory that failed, and only then writes — and a budget sized for
+# choosing would cut it off mid-thought.
 DEFAULT_LIMITS = AgentLimits(step_limit=40, wall_time_limit_seconds=900)
 
 # `validate` refuses to end a turn on an unchanged tree, which stops a programmer
 # submitting the parent it was handed. The director has no equivalent hazard —
-# the plan it validates is the plan it just wrote — so the guard is switched off
-# with a digest nothing can produce, `digest` always returning a full hex hash.
+# the constraint it validates is the constraint it just wrote — so the guard is
+# switched off with a digest nothing can produce, `digest` always returning a
+# full hex hash.
 NO_BASELINE_DIGEST = ""
 
 INSTANCE_TEMPLATE = """{{task}}
@@ -51,11 +52,9 @@ INSTANCE_TEMPLATE = """{{task}}
   is there for you to read, and reading it is the point.
 - Directory and environment variable changes are not persistent. Every `bash`
   call runs in a new subshell, starting in your working directory.
-- Call `validate` once you have written `plan.json`. It reports what is wrong
+- Call `validate` once you have written `constraint.md`. It reports what is wrong
   with it, and ends your turn if there is nothing wrong.
-- **`validate` ends your turn, so write `memory.md` before you write
-  `plan.json`.** A notebook you meant to update afterwards is one you did not.
-- Call `give_up` if you cannot write a plan.
+- Call `give_up` if you cannot write a constraint.
 
 <system_information>
 {{system}} {{release}} {{version}} {{machine}}
@@ -63,32 +62,24 @@ INSTANCE_TEMPLATE = """{{task}}
 
 # Useful commands
 
+Read the whole tree — every node, every constraint in full, every attempt:
+
+    python3 -m optiverse.search.tree ../..
+    python3 -m optiverse.search.tree ../.. n_1a2b3c
+
 Read what a candidate actually does:
 
     cat ../../solutions/s_851621dd*/code/*.go
 
-Read what an earlier iteration decided and expected:
+Read the constraint an earlier iteration wrote:
 
-    cat ../00042/plan.json
+    cat ../00042/constraint.md
 
-Rewrite your notebook — it is a model, not a log, so replace it rather than
-appending to it:
+Write yours:
 
-    cat <<'EOF' > memory.md
-    ## What this problem rewards
+    cat <<'EOF' > constraint.md
     ...
     EOF
-
-Write the plan:
-
-    cat <<'EOF' > plan.json
-    {"verdict": "...", "reasoning": "...", "expectation": "...",
-     "parent_node_id": "n_root", "parent_solution_id": "s_...", "constraint": "..."}
-    EOF
-
-Read the tree as data:
-
-    python3 -m json.tool ../../arcs.json
 """
 
 
@@ -158,7 +149,7 @@ class AgentDirector(Director):
     def _run(self, agent: Any, context: DirectorContext) -> str:
         """Run the agent, reporting a failure rather than raising through.
 
-        A director that crashes leaves no plan, which the loop treats as a
+        A director that crashes leaves no constraint, which the loop treats as a
         crashed iteration: there is deliberately nothing to fall back to. The
         exit status is what says which kind of failure it was.
         """

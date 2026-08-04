@@ -1,6 +1,7 @@
-Angles for inventing a constraint the search has not tried. These are about how
+Kicks: ways to make the next constraint unlike the last one. These are about how
 to search, not about any particular problem, so none of them names a technique —
-that is your job, given what this problem turns out to reward.
+that is your job, given what this problem turns out to reward. One of them is
+drawn at random on half of all perturbations.
 
 - **Borrow from another domain.** How would a database engine, a compiler
   backend, a network stack, a filesystem or a game engine attack this? Add the
@@ -41,3 +42,33 @@ that is your job, given what this problem turns out to reward.
 
 - **Question the obvious step.** Name the one thing every branch does because it
   seems necessary, and add a constraint that does without it.
+
+- **Cross two branches.** Take a constraint from a branch that worked and one
+  from a branch that did not, and add a constraint committing to both. The tree
+  is the only place this move is visible, which is why it is the one nobody
+  makes.
+
+- **Revive a near miss.** Find a node that scored well once and was never
+  returned to. Add a constraint that varies it rather than one that repeats it.
+
+- **Do the dumb thing well.** Take the cleverest mechanism in the best branch and
+  constrain it to the most obvious possible version, done carefully. Clever costs
+  something, and it is not always buying anything.
+
+- **Accept an approximation.** Add a constraint that gives up exactness inside a
+  budget you state, and spends what that buys.
+
+- **Use the shape of the input.** Name a regularity the real data has — sorted
+  runs, repeated values, a narrow range, a skew — that every branch has treated
+  as if it were absent, and constrain toward exploiting it.
+
+- **Attack the worst case.** Every branch so far has been made better at what it
+  was already good at. Find where the incumbent does badly instead, and constrain
+  toward that.
+
+- **Make a fixed choice adaptive.** Find a constant every branch hard-codes and
+  add a constraint that decides it from the input instead.
+
+- **Split what does two jobs.** Take one mechanism serving two purposes and
+  constrain it to serve one of them properly. Or take two that overlap and
+  constrain them into one.

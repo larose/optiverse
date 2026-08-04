@@ -7,19 +7,25 @@ normally costs two model calls — one to produce the state, one to read the pro
 that state produced. That is a bad loop to iterate prose in. This builds the same
 prompt from a run already on disk and prints it, for nothing.
 
-Passing an iteration renders as though the search were about to plan that one,
-which is how the rotation in *Ideas already tried* is checked: run it over a few
-consecutive numbers and watch the window advance and wrap.
+Passing an iteration renders as though the search were about to run that one,
+which is how both moving parts are checked: the rotation in *Ideas already tried*
+advances and wraps, and the base node and the kick are drawn from the iteration
+number, so consecutive numbers show the draws actually varying — and the same
+number twice shows them not varying, which is the property the run depends on.
 
-It writes nothing, because `Search.compose` writes nothing. The problem statement
-is the one thing not in a run directory, so a placeholder stands in for it.
+Most iterations are local search and call no director at all. The prompt is
+rendered for them anyway, because the point here is to read the prose rather
+than to predict the schedule; the header says which it would have been.
+
+It renders. It does not touch what the run has decided.
 """
 
 import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import DEFAULT_PLAYBOOK, Search
+from . import DEFAULT_KICKS, Search
+from .policy import Phase
 from ..director import Director, DirectorContext, DirectorResult
 from ..solution import FileSystemStore
 
@@ -41,22 +47,32 @@ def render(directory: Path, iteration: Optional[int] = None) -> str:
     search = Search(
         directory=directory,
         director=_NoDirector(),
-        playbook=DEFAULT_PLAYBOOK,
+        kicks=DEFAULT_KICKS,
         store=store,
     )
 
     at = iteration if iteration is not None else search.completed_iterations() + 1
-    prompt, turn = search.compose(at, PLACEHOLDER)
+    move = search.next_move(at)
+
+    note = "" if move.phase is Phase.PERTURB else " — no director runs on this one"
 
     header = [
-        f"<!-- preview: iteration {turn.iteration} of {directory} -->",
-        f"<!-- stage {turn.stage.value}"
-        f" | review: {turn.reviewing or 'no'}"
-        f" | reconciling: {'yes' if turn.reconciling else 'no'} -->",
+        f"<!-- preview: iteration {at} of {directory}{note} -->",
+        f"<!-- phase {move.phase.value}"
+        f" | base {move.base.id}"
+        f" | from {move.parent_solution.id}"
+        f" | kick: {_kick(move.kick)} -->",
         "",
     ]
 
-    return "\n".join(header) + prompt
+    return "\n".join(header) + search.compose(at, move, PLACEHOLDER)
+
+
+def _kick(kick: Optional[str]) -> str:
+    if kick is None:
+        return "none"
+
+    return " ".join(kick.split())[:60]
 
 
 def main(argv: List[str]) -> int:

@@ -11,7 +11,7 @@ from typing import Sequence
 from .director import Director
 from .evaluator import EvaluatorCommand
 from .programmer import Programmer
-from .search import DEFAULT_PLAYBOOK
+from .search import DEFAULT_KICKS
 
 
 @dataclass(frozen=True)
@@ -42,8 +42,9 @@ class OptimizerConfig:
     problem: Problem
     director: Director
 
-    playbook: Path = field(default=DEFAULT_PLAYBOOK)
-    """Angles for inventing a constraint the search has not tried.
+    kicks: Path = field(default=DEFAULT_KICKS)
+    """Ways to make the next constraint unlike the last one. One is drawn at
+    random on half of all perturbations.
 
     Ships with the package because it is about how to search rather than about
     any one problem — the only part of a run that transfers unchanged to the
