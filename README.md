@@ -42,9 +42,10 @@ Each iteration:
 
 1. The director names a node to work under, names a solution whose code the agent
    starts from, and may add one constraint — which creates a child of that node
-   and works there instead. **That is the whole of what it can say.** There is no
-   free-form brief: if it wants the agent to do something, that is a constraint,
-   and a constraint is a node.
+   and works there instead. **That is the whole of what it can say to the coding
+   agent.** There is no free-form brief: if it wants the agent to do something,
+   that is a constraint, and a constraint is a node. Beside that it writes three
+   pieces of prose for itself — see below.
 2. The chosen solution's code is copied into the agent's working directory, and
    the agent changes it. It has three tools — `bash`, `validate` and `give_up` —
    and its turn ends when `validate` reports valid on something it changed.
@@ -59,8 +60,32 @@ The director sees every score; the coding agent sees none — not its own, not i
 parent's. Ranking is the director's job, and an agent that could see a score
 would abandon a novel approach the moment it looked worse than the incumbent.
 
-Nothing an agent works out survives its turn. What carries between iterations is
-the tree, the scores and the code — everything else is in a log for you to read.
+**The director predicts before it measures.** Every plan carries a `reasoning`
+and an `expectation` alongside the decision, and the next iteration opens with
+that expectation and the score it got, and a `verdict` field to answer it in. A
+director shown only a tree reads the same tree the same way every time, which is
+what a loop is; one shown what it said last time and what happened has something
+to disagree with. Scoring is noisy, so the prediction has to be written before
+the number arrives for it to be worth anything.
+
+**The director keeps a notebook.** `memory.md` is its model of the problem — what
+this problem rewards, what is settled, what is a dead end and why. It is
+rewritten rather than appended, it is the director's alone, and it never reaches
+a coding agent, because beliefs about what scores well cannot go to an agent
+deliberately kept ignorant of scores. Every so often — on a schedule the director
+does not set, and whenever the run stalls — an iteration becomes a **review**: it
+has to go and read something the prompt did not show it, and write the notebook
+back, before it may plan.
+
+**The deep past is put back in front of it.** A run of eight hundred iterations
+has a tree too large to print, so the prompt shows the eight ideas that scored
+best and eight more on a rotation that advances every iteration. Every constraint
+ever written comes round on a fixed cycle. That is the raw exposure; deciding
+which of it matters is what the notebook is for.
+
+Nothing a *coding* agent works out survives its turn. What carries between
+iterations is the tree, the scores, the code, and the two things the director
+wrote for itself.
 
 ## Quick start
 
@@ -112,6 +137,7 @@ Each run writes to `tmp/YYYYMMDD_HHMMSS`, named for when it started:
 ```
 tmp/20260730_133833/
   arcs.json                         the tree: (parent, child, constraint) triplets
+  memory.md                         what the director currently believes
   solutions.csv                     the population, best score first
   solutions/s_<id>/
     code/                           the solution itself
@@ -119,7 +145,8 @@ tmp/20260730_133833/
   iterations/00001/
     director-prompt.md              what the director was shown
     director.log                    what it did
-    plan.json                       what it decided
+    plan.json                       what it decided, why, and what it expected
+    memory.md                       its notebook as of this iteration, if it wrote one
     generator-prompt.md             what the coding agent was shown
     generator.log                   what it did
   iterations/00002_crashed_1/       an attempt that died, set aside intact
@@ -127,11 +154,22 @@ tmp/20260730_133833/
 
 `iterations/` holds the process, `solutions/` holds the product. Every file is
 either a primary fact or a verbatim artifact — nothing is derived and saved, so
-there is nothing that can drift out of step with what actually happened.
+there is nothing that can drift out of step with what actually happened. That
+includes the run's history: what the search *did*, as opposed to what its tree
+looks like, is the join of each `plan.json` against the solution its iteration
+committed, on the iteration number both already carry.
 
 Start with the newest `director-prompt.md`. It carries the tree with attempts and
 scores, and it is exactly what the director read — so a search that is
-unreadable to you was unreadable to it.
+unreadable to you was unreadable to it. To read one without spending a run:
+
+```bash
+python3 -m optiverse.preview tmp/20260730_133833 [iteration]
+```
+
+`git diff` across `iterations/*/memory.md` is the other thing worth reading. It
+is the director's model of the problem changing, and a notebook that only ever
+grows is a director that is not actually thinking.
 
 In `solutions.csv`, every metric an evaluator returns becomes an `m_*` column and
 every tag a generator or director sets becomes a `t_*` column, so problem-specific
@@ -191,11 +229,13 @@ until you care.
 
 The director is also given a **playbook**: angles for inventing a constraint the
 search has not tried, such as borrowing from another domain or inverting an
-assumption every node shares. It appears only when the node the search is sitting
-on has stopped paying off — four attempts without improving on its own best —
-since that is the moment a new constraint is the way out and any earlier it is
-noise. One angle is then named at random. It ships as `optiverse/playbook.md`, and
-`OptimizerConfig.playbook` points somewhere else if you want your own.
+assumption every node shares. It appears only once the run has stopped paying
+off, since that is the moment a new constraint is the way out and any earlier it
+is noise — and then it appears whole. Naming one angle at random cost the run its
+reproducibility and, with nothing recording what had been shown, could name the
+same one for the rest of a thousand iterations. It ships as
+`optiverse/playbook.md`, and `OptimizerConfig.playbook` points somewhere else if
+you want your own.
 
 ### The evaluator contract
 

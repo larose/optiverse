@@ -31,10 +31,11 @@ logger = logging.getLogger(__name__)
 MODEL_VARIABLE = "OPTIVERSE_DIRECTOR_MODEL"
 FALLBACK_MODEL_VARIABLE = "OPTIVERSE_MODEL"
 
-# Deciding what to try next is cheaper than building it, so the director is held
-# to a tighter budget than the generator's 40 steps and 900 seconds. If it needs
-# forty steps to pick a direction, the tree it was given is the problem.
-DEFAULT_LIMITS = AgentLimits(step_limit=25, wall_time_limit_seconds=600)
+# Matched to the generator's, and for the same reason: the job is no longer only
+# to pick a direction. On a review the director reads a candidate it has not seen,
+# reconciles the last prediction, and rewrites its notebook before it decides —
+# and a budget sized for choosing from a list would cut it off mid-thought.
+DEFAULT_LIMITS = AgentLimits(step_limit=40, wall_time_limit_seconds=900)
 
 # `validate` refuses to end a turn on an unchanged tree, which stops a generator
 # submitting the parent it was handed. The director has no equivalent hazard —
@@ -52,6 +53,8 @@ INSTANCE_TEMPLATE = """{{task}}
   call runs in a new subshell, starting in your working directory.
 - Call `validate` once you have written `plan.json`. It reports what is wrong
   with it, and ends your turn if there is nothing wrong.
+- **`validate` ends your turn, so write `memory.md` before you write
+  `plan.json`.** A notebook you meant to update afterwards is one you did not.
 - Call `give_up` if you cannot write a plan.
 
 <system_information>
@@ -64,10 +67,23 @@ Read what a candidate actually does:
 
     cat ../../solutions/s_851621dd*/code/*.go
 
+Read what an earlier iteration decided and expected:
+
+    cat ../00042/plan.json
+
+Rewrite your notebook — it is a model, not a log, so replace it rather than
+appending to it:
+
+    cat <<'EOF' > memory.md
+    ## What this problem rewards
+    ...
+    EOF
+
 Write the plan:
 
     cat <<'EOF' > plan.json
-    {"parent_node_id": "n_root", "parent_solution_id": "s_...", "constraint": "..."}
+    {"verdict": "...", "reasoning": "...", "expectation": "...",
+     "parent_node_id": "n_root", "parent_solution_id": "s_...", "constraint": "..."}
     EOF
 
 Read the tree as data:

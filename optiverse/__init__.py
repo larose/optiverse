@@ -12,7 +12,10 @@ from . import evaluator
 from . import evaluator_main
 from . import generator
 from . import graph
+from . import journal
+from . import metrics
 from . import optimizer
+from . import preview
 from . import prompt_generator
 from . import search
 from . import store
@@ -25,7 +28,10 @@ __all__ = [
     "evaluator_main",
     "generator",
     "graph",
+    "journal",
+    "metrics",
     "optimizer",
+    "preview",
     "prompt_generator",
     "search",
     "store",
