@@ -34,6 +34,15 @@ ITERATIONS_DIRECTORY_NAME = "iterations"
 PLAN_NAME = "plan.json"
 MEMORY_NAME = "memory.md"
 
+# What each agent was shown and what it did. Named here with the rest of the
+# layout rather than beside the code that writes them, because the prompt tells
+# the director to go and read them — so the name has two readers, and a literal
+# spelled out at the second one is a link that breaks silently.
+DIRECTOR_PROMPT_NAME = "director-prompt.md"
+DIRECTOR_LOG_NAME = "director.log"
+GENERATOR_PROMPT_NAME = "generator-prompt.md"
+GENERATOR_LOG_NAME = "generator.log"
+
 # What a set-aside attempt is called: `00079_crashed_1`, beside `00079`.
 CRASHED_SUFFIX = "_crashed_"
 

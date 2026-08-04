@@ -5,6 +5,7 @@ a coding agent — `optiverse.generators`, which writes candidates, and
 `optiverse.directors`, which decides what to try next — are imported explicitly.
 """
 
+from . import brief
 from . import codebase
 from . import config
 from . import director
@@ -21,6 +22,7 @@ from . import search
 from . import store
 
 __all__ = [
+    "brief",
     "codebase",
     "config",
     "director",
