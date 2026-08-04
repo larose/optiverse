@@ -126,7 +126,7 @@ tmp/20260730_133833/
     plan.json                       what it decided
     generator-prompt.md             what the coding agent was shown
     generator.log                   what it did
-  iterations/crashed/               attempts that died, moved aside intact
+  iterations/00002_crashed_1/       an attempt that died, set aside intact
 ```
 
 `iterations/` holds the process, `solutions/` holds the product. Every file is
@@ -148,8 +148,12 @@ have to fit in a CSV cell.
 To resume, point a run at a directory it already wrote. There is no checkpoint
 file: every iteration produces exactly one solution and `metadata.json` is
 written last, so the highest `iteration` among committed solutions is where the
-run picks up. An iteration that died partway through is re-run, and what it left
-behind moves to `iterations/crashed/` rather than being overwritten.
+run picks up. An iteration that produced no solution did not happen: whatever it
+left behind is renamed `iterations/NNNNN_crashed_1` — beside the original, so it
+is hard to miss — and the same number is attempted again. There is deliberately
+no fallback plan. Substituting one gave a byte-identical brief every time the
+director was down, so a broken run kept paying for generations that re-derived
+what it already had; now it retries in plain sight instead.
 
 ```bash
 DIRECTORY=tmp/20260730_133833 make run.tsp
@@ -157,8 +161,8 @@ DIRECTORY=tmp/20260730_133833 make run.tsp
 
 No evaluator log is kept, since re-running one beats a stale copy:
 `python examples/tsp/harness/evaluate.py score tmp/<run>/solutions/<id>/code`. A
-directory with no `metadata.json` is an iteration that died partway through; it is
-ignored and left for you to inspect.
+solution directory with no `metadata.json` belongs to an attempt that died after
+the codebase was allocated; it is ignored and left for you to inspect.
 
 ## Defining your own problem
 

@@ -31,7 +31,6 @@ from .store import Solution, Store
 logger = logging.getLogger(__name__)
 
 ITERATIONS_DIRECTORY_NAME = "iterations"
-CRASHED_DIRECTORY_NAME = "crashed"
 MEMORY_NAME = "memory.md"
 PLAN_NAME = "plan.json"
 
@@ -39,6 +38,9 @@ DIRECTOR_PROMPT_NAME = "director-prompt.md"
 DIRECTOR_LOG_NAME = "director.log"
 GENERATOR_PROMPT_NAME = "generator-prompt.md"
 GENERATOR_LOG_NAME = "generator.log"
+
+# What a set-aside attempt is called: `00079_crashed_1`, beside `00079`.
+CRASHED_SUFFIX = "_crashed_"
 
 # Wide enough that names still sort in `ls` past any run length worth having.
 # The width has to exceed the ceiling it is chosen for rather than match it: at
@@ -66,6 +68,9 @@ class Plan:
 @dataclass(frozen=True)
 class SearchResult:
     plan: Optional[Plan]
+    """What to build, or None when the iteration has failed. There is no
+    fallback plan: see `_apply`."""
+
     tags: Dict[str, Union[int, str]]
 
 
@@ -191,33 +196,54 @@ class Search:
 
         return SearchResult(plan=self._apply(iteration), tags=tags)
 
-    def _prepare(self, iteration: int) -> Path:
-        """The iteration's directory, empty and ready.
+    def mark_crashed(self, iteration: int) -> Optional[Path]:
+        """Set this attempt aside under a name that says what it is.
 
-        A directory already here belongs to an attempt that crashed, since a
-        finished one would have committed its solution and raised the resume
-        point past this number. It is moved aside rather than written over:
-        whatever is in it — a half-written log, the prompt that broke a model —
-        is the reason to look.
+        `00079_crashed_1` sits beside `00079` rather than under a `crashed/`
+        subdirectory, so it is impossible to miss in `ls` — which is the whole
+        job, since what is in it is the reason to look: the prompt that broke a
+        model, a half-written log.
+
+        Returns where it went, or None if the attempt left nothing behind.
         """
         directory = self.iteration_directory(iteration)
 
-        if directory.exists():
-            crashed = (
-                self._directory / ITERATIONS_DIRECTORY_NAME / CRASHED_DIRECTORY_NAME
-            )
-            crashed.mkdir(parents=True, exist_ok=True)
+        if not directory.exists():
+            return None
 
-            attempt = 1
-            while (crashed / f"{directory.name}-{attempt}").exists():
-                attempt += 1
+        attempt = 1
+        while self._crashed_path(iteration, attempt).exists():
+            attempt += 1
 
-            directory.rename(crashed / f"{directory.name}-{attempt}")
+        destination = self._crashed_path(iteration, attempt)
+        directory.rename(destination)
+
+        return destination
+
+    def _crashed_path(self, iteration: int, attempt: int) -> Path:
+        name = self.iteration_directory(iteration).name
+        return (
+            self._directory
+            / ITERATIONS_DIRECTORY_NAME
+            / f"{name}{CRASHED_SUFFIX}{attempt}"
+        )
+
+    def _prepare(self, iteration: int) -> Path:
+        """The iteration's directory, empty and ready.
+
+        A directory still here belongs to an attempt nothing got to mark — a
+        killed process, rather than a failure the loop saw. It is set aside the
+        same way and never written over.
+        """
+        marked = self.mark_crashed(iteration)
+
+        if marked is not None:
             logger.info(
-                f"Iteration {iteration} left a directory behind; moved it to "
-                f"{CRASHED_DIRECTORY_NAME}/{directory.name}-{attempt}"
+                f"Iteration {iteration} left a directory behind; it is now "
+                f"{marked.name}"
             )
 
+        directory = self.iteration_directory(iteration)
         directory.mkdir(parents=True)
 
         return directory
@@ -315,13 +341,14 @@ class Search:
     def _apply(self, iteration: int) -> Optional[Plan]:
         """Turn a validated plan into a node to work under and code to start from.
 
-        A crashed or confused director costs a weak iteration rather than a lost
-        one: the loop falls back to another attempt at the best solution's own
-        node, which is the least surprising thing to do with the budget.
+        `None` means the iteration has failed, and there is deliberately nothing
+        to fall back to. Substituting "another attempt at the best solution" gave
+        a byte-identical brief every time the director was down, so the loop paid
+        for a full generation and score to re-derive what it already had, and
+        said nothing louder than a warning.
         """
         if not self.validate(iteration).valid:
-            logger.warning(f"No usable {PLAN_NAME}; falling back to the best solution")
-            return self._fallback()
+            return None
 
         fields = cast(
             Dict[str, object], json.loads(self.plan_path(iteration).read_text())
@@ -342,21 +369,6 @@ class Search:
             parent_solution_id=cast(str, fields["parent_solution_id"]),
             memory=[str(line) for line in cast(List[object], fields.get("memory", []))],
         )
-
-    def _fallback(self) -> Optional[Plan]:
-        solutions = self._store.get_all_solutions()
-        scored = [s for s in solutions if s.score is not None]
-
-        best = (
-            min(scored, key=lambda s: cast(float, s.score))
-            if scored
-            else next(iter(solutions), None)
-        )
-
-        if best is None:
-            return None
-
-        return Plan(node_id=best.node_id, parent_solution_id=best.id, memory=[])
 
     # --- the playbook --------------------------------------------------------
 

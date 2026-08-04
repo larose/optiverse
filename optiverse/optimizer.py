@@ -16,6 +16,10 @@ from .store import FileSystemStore, Solution
 logger = logging.getLogger(__name__)
 
 
+class IterationFailed(Exception):
+    """The iteration produced no solution. It is set aside and tried again."""
+
+
 class Optimizer:
     def __init__(self, config: OptimizerConfig) -> None:
         self._config = config
@@ -39,8 +43,10 @@ class Optimizer:
         plan = search_result.plan
 
         if plan is None:
-            logger.warning(f"Iteration {iteration} has nothing to build on; skipping")
-            return
+            # Raised before anything is allocated, so a planless iteration leaves
+            # no half-made solution directory behind at all.
+            status = search_result.tags.get("director_exit_status", "unknown")
+            raise IterationFailed(f"the director wrote no usable plan ({status})")
 
         # Allocate first, so the agent works directly in the solution's final
         # home. There is no scratch directory and nothing to copy back.
@@ -153,7 +159,14 @@ class Optimizer:
         `metadata.json` is written atomically and last, and every iteration
         produces exactly one solution, so a committed solution is the record that
         its iteration finished — there is no checkpoint file that could disagree
-        with it, and an iteration that died partway through is simply re-run.
+        with it.
+
+        The number therefore only advances once a solution has committed. An
+        attempt that did not get that far did not happen: it is set aside under a
+        name that says so and the same number is tried again, which is already
+        what resume assumes. That is deliberately unbounded — a director that is
+        broken rather than unlucky will retry forever, in plain sight, rather
+        than quietly spending the budget on something else.
 
         Iterations are numbered from 1, and it is the loop that counts that way
         rather than each place the number is displayed. The same value reaches the
@@ -168,18 +181,35 @@ class Optimizer:
         elif completed > 0:
             logger.info(f"Resuming after {completed} completed iterations")
 
-        for iteration in range(completed + 1, self._config.max_iterations + 1):
+        iteration = completed + 1
+
+        while iteration <= self._config.max_iterations:
             logger.info(f"Starting iteration {iteration}/{self._config.max_iterations}")
 
-            try:
-                self._do_iteration(iteration=iteration)
-            except Exception as e:
-                logger.info(
-                    f"Iteration {iteration} failed with error: {e}", exc_info=True
-                )
-                continue
+            if self._attempt(iteration):
+                iteration += 1
 
         self._report_best_solution()
+
+    def _attempt(self, iteration: int) -> bool:
+        """One attempt at an iteration. True once its solution has committed."""
+        try:
+            self._do_iteration(iteration=iteration)
+            return True
+        except IterationFailed as error:
+            reason = str(error)
+        except Exception as error:
+            # Not a failure the loop knows about, so the traceback goes out. What
+            # happens next is the same either way.
+            logger.warning(f"Iteration {iteration} raised", exc_info=True)
+            reason = f"{type(error).__name__}: {error}"
+
+        marked = self._search.mark_crashed(iteration)
+        location = f" The attempt is at {marked.name}." if marked else ""
+
+        logger.warning(f"Iteration {iteration} crashed: {reason}.{location} Retrying.")
+
+        return False
 
     def _report_best_solution(self) -> None:
         logger.info("\n" + "=" * 50)
