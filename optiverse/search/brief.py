@@ -23,7 +23,7 @@ from .journal import (
     Progress,
 )
 from .metrics import render as render_metrics
-from .policy import PATIENCE, Move, eligible
+from .policy import PATIENCE, Move
 from ..solution import Solution
 
 # Ideas shown every iteration because they scored, and ideas shown because it is
@@ -99,7 +99,7 @@ def compose(
         "",
         "# Your move",
         "",
-        *_move(graph, move),
+        *_move(move),
     ]
 
     if move.kick is not None:
@@ -133,19 +133,27 @@ def _state(graph: Graph, progress: Progress) -> str:
     if best is None or best.score is None:
         lines.append("Nothing has scored yet.")
     else:
-        if progress.best_iteration is None:
-            ago = ", the seed nothing has beaten yet"
-        elif progress.drought == 0:
-            ago = f", from iteration {progress.best_iteration} — the last one"
-        else:
-            plural = "" if progress.drought == 1 else "s"
-            ago = (
-                f", from iteration {progress.best_iteration}, "
-                f"{progress.drought} iteration{plural} ago"
-            )
-        lines.append(
-            f"Best so far: {best.score:.6g} — {best.id} at {best.node_id}{ago}."
+        # Where the incumbent came from, and how long it has held, as two
+        # sentences. The second used to be a clause on the end of the first, and
+        # how long a run has been going nowhere is the last thing that should be
+        # read as an aside.
+        came = (
+            ", the seed"
+            if progress.best_iteration is None
+            else f", from iteration {progress.best_iteration}"
         )
+        lines.append(
+            f"Best so far: {best.score:.6g} — {best.id} at {best.node_id}{came}."
+        )
+
+        if progress.drought == 0 and progress.best_iteration is not None:
+            lines.append("That was the iteration that just finished.")
+        elif progress.drought:
+            one = progress.drought == 1
+            lines.append(
+                f"{progress.drought} iteration{'' if one else 's'} "
+                f"{'has' if one else 'have'} passed without beating it."
+            )
 
     unattempted = f", {len(empty)} never attempted" if empty else ""
     lines.append(
@@ -158,7 +166,8 @@ def _state(graph: Graph, progress: Progress) -> str:
     if span:
         plural = "" if progress.window_created == 1 else "s"
         lines.append(
-            f"The last {span} iterations worked {progress.window_worked} distinct "
+            f"The last {span} iteration{'' if span == 1 else 's'} worked "
+            f"{progress.window_worked} distinct "
             f"node{'' if progress.window_worked == 1 else 's'} and created "
             f"{progress.window_created} new one{plural}."
         )
@@ -169,7 +178,7 @@ def _state(graph: Graph, progress: Progress) -> str:
 # --- the sections -----------------------------------------------------------
 
 
-def _move(graph: Graph, move: Move) -> List[str]:
+def _move(move: Move) -> List[str]:
     """Where the search has put you, and what it will build from.
 
     The draw is described as a draw. A director told only *which* node it is
@@ -184,7 +193,7 @@ def _move(graph: Graph, move: Move) -> List[str]:
     label = "(no constraints)" if base.constraint is None else base.constraint
 
     lines = [
-        f"The search drew {base.id} out of {len(eligible(graph))} nodes with a "
+        f"The search drew {base.id} out of {move.drawn_from} nodes with a "
         "score under them. Your constraint becomes a child of it.",
         "",
         f'  {base.id}  "{label}"',

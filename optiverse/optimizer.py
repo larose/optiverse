@@ -1,15 +1,16 @@
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Union, cast
+from typing import Dict, Optional, Union, cast
 
 from .solution import codebase as codebase_helpers
 from .config import OptimizerConfig
 from .evaluator import SCORE, EvaluatorError, ScoreResult
 from .programmer import ProgrammerContext
 from .programmer import prompt as programmer_prompt
-from .search import Phase, Search
+from .search import PATIENCE, Move, Phase, Progress, Search
 from .search.graph import ROOT_NODE_ID
+from .search.policy import kick_title
 from .solution import FileSystemStore, Solution
 
 
@@ -18,6 +19,58 @@ logger = logging.getLogger(__name__)
 
 class IterationFailed(Exception):
     """The iteration produced no solution. It is set aside and tried again."""
+
+
+def _describe(iteration: int, total: int, move: Move) -> str:
+    """One line saying what this iteration is about to do, and why.
+
+    Which phase an iteration is in is the most interesting thing about it now
+    that the policy rather than a model decides it, and it was invisible: the
+    console said "Starting iteration 15" and nothing else. `stale N of M` counts
+    toward the perturbation, so the phase changing is something a reader saw
+    coming rather than something that happens.
+    """
+    source = move.parent_solution
+    scored = "unscored" if source.score is None else f"{source.score:.6g}"
+
+    if move.phase is Phase.PERTURB:
+        plural = "" if move.drawn_from == 1 else "s"
+        what = f"perturb: {move.base.id} drawn from {move.drawn_from} node{plural}"
+
+        if move.kick is not None:
+            what += f', kick "{kick_title(move.kick)}"'
+    else:
+        what = f"local search: {move.base.id}, stale {move.base.stale} of {PATIENCE}"
+
+    return f"Iteration {iteration}/{total} — {what}, code from {source.id} ({scored})"
+
+
+def _describe_result(
+    solution_id: str, score: Optional[float], progress: Progress
+) -> str:
+    """One line saying what came of it, and whether the run moved.
+
+    `progress` is the run as it stood *going in*, which is why no second read is
+    needed: a score that beats the incumbent is the new best, and anything else
+    extends the drought by exactly one — including a candidate that did not
+    score, because it did not improve either.
+    """
+    got = "did not score" if score is None else f"score {score:.6g}"
+    best = progress.best.score if progress.best else None
+
+    if score is not None and (best is None or score < best):
+        return f"Saved {solution_id} — {got}, a new run best"
+
+    if best is None:
+        return f"Saved {solution_id} — {got}"
+
+    drought = progress.drought + 1
+    plural = "" if drought == 1 else "s"
+
+    return (
+        f"Saved {solution_id} — {got}, run best {best:.6g} unbeaten for "
+        f"{drought} iteration{plural}"
+    )
 
 
 class Optimizer:
@@ -45,6 +98,10 @@ class Optimizer:
         self._search.begin(iteration)
 
         move = self._search.next_move(iteration)
+        progress = self._search.progress(iteration)
+
+        logger.info(_describe(iteration, self._config.max_iterations, move))
+
         node_id = move.base.id
 
         metrics: Dict[str, Union[int, float]] = {}
@@ -113,10 +170,7 @@ class Optimizer:
             tags={**tags, **programmer_result.tags},
         )
 
-        if score_result.score is None:
-            logger.info(f"Saved unscoreable solution {solution_id} for inspection")
-        else:
-            logger.info(f"Saved solution {solution_id}, score: {score_result.score}")
+        logger.info(_describe_result(solution_id, score_result.score, progress))
 
     def _score(self, codebase: Path) -> ScoreResult:
         """Score a candidate, treating a broken evaluator as unscoreable.
@@ -204,8 +258,10 @@ class Optimizer:
         iteration = completed + 1
 
         while iteration <= self._config.max_iterations:
-            logger.info(f"Starting iteration {iteration}/{self._config.max_iterations}")
-
+            # The iteration announces itself once it knows what it is doing, in
+            # `_do_iteration`. A bare "starting" line here would be the same
+            # number twice, and the useful half is the one that had to wait for
+            # the policy.
             if self._attempt(iteration):
                 iteration += 1
 

@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import DEFAULT_KICKS, Search
-from .policy import Phase
+from .policy import Phase, kick_title
 from ..director import Director, DirectorContext, DirectorResult
 from ..solution import FileSystemStore
 
@@ -69,10 +69,7 @@ def render(directory: Path, iteration: Optional[int] = None) -> str:
 
 
 def _kick(kick: Optional[str]) -> str:
-    if kick is None:
-        return "none"
-
-    return " ".join(kick.split())[:60]
+    return "none" if kick is None else kick_title(kick)
 
 
 def main(argv: List[str]) -> int:

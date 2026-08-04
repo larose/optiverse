@@ -45,6 +45,9 @@ PATIENCE = STALENESS_LIMIT
 # variations on the same handful of suggestions.
 KICK_PROBABILITY = 0.5
 
+# What a kick is clipped to when it does not carry a title of its own.
+_TITLE_WIDTH = 48
+
 
 class Phase(Enum):
     """Which half of the loop an iteration is."""
@@ -74,6 +77,10 @@ class Move:
 
     kick: Optional[str]
     """One entry from `kicks.md`, on half of perturbations. None otherwise."""
+
+    drawn_from: Optional[int]
+    """How many nodes `base` was drawn out of. None on a local search, which
+    draws nothing — the search is already standing where it continues."""
 
 
 def decide(
@@ -106,11 +113,13 @@ def decide(
             base=here,
             parent_solution=code_source(graph, here),
             kick=None,
+            drawn_from=None,
         )
 
     rng = random.Random(iteration)
+    candidates = eligible(graph)
 
-    base = rng.choice(eligible(graph))
+    base = rng.choice(candidates)
     kick = (
         rng.choice(list(kicks)) if kicks and rng.random() < KICK_PROBABILITY else None
     )
@@ -120,6 +129,7 @@ def decide(
         base=base,
         parent_solution=code_source(graph, base),
         kick=kick,
+        drawn_from=len(candidates),
     )
 
 
@@ -190,6 +200,24 @@ def phase_of(solution: Solution, first_seen: Dict[str, int]) -> Phase:
     )
 
 
+def kick_title(kick: str) -> str:
+    """A kick in a few words, for a log line or a preview header.
+
+    Every entry in `kicks.md` opens `- **Title.** body`, so the title is what
+    sits between the first pair of `**`. A file someone has edited into another
+    shape falls back to a clipped opening rather than to nothing, because this is
+    only ever used to label something the reader can go and look at in full.
+    """
+    collapsed = " ".join(kick.split())
+    _, marker, rest = collapsed.partition("**")
+    title, closing, _ = rest.partition("**")
+
+    if marker and closing and title.strip():
+        return title.strip().rstrip(".")
+
+    return collapsed[:_TITLE_WIDTH]
+
+
 def _best(solutions: Sequence[Solution]) -> Optional[Solution]:
     scored = [solution for solution in solutions if solution.score is not None]
 
@@ -207,5 +235,6 @@ __all__ = [
     "code_source",
     "decide",
     "eligible",
+    "kick_title",
     "phase_of",
 ]

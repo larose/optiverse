@@ -23,7 +23,7 @@ solutions already carry.
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from .brief import compose
 from ..director import Director, DirectorContext
@@ -38,9 +38,10 @@ from .journal import (
     PROGRAMMER_PROMPT_NAME,
     ITERATIONS_DIRECTORY_NAME,
     Journal,
+    Progress,
     iteration_directory,
 )
-from .policy import Move, Phase, decide
+from .policy import PATIENCE, Move, Phase, decide
 from ..solution import Solution, Store
 
 logger = logging.getLogger(__name__)
@@ -160,15 +161,34 @@ class Search:
         Touches nothing, so a preview can ask the same question of a run on disk
         without changing it — and so a crashed iteration, retried, decides the
         same way as the attempt it replaces.
+
         """
-        solutions = self._store.get_all_solutions()
+        solutions, graph = self._before(iteration)
 
         return decide(
-            graph=self._graph(solutions),
+            graph=graph,
             solutions=solutions,
             iteration=iteration,
             kicks=self._kicks(),
         )
+
+    def progress(self, before: int) -> Progress:
+        """The run's own numbers as they stood going into `before`.
+
+        Cheap now that the journal reads no per-iteration files: one pass over
+        the solutions the store has already listed, against an iteration that is
+        about to run a coding agent. So the loop can afford to say out loud where
+        the run stands rather than leaving it to be reconstructed from
+        `solutions.csv` afterwards.
+        """
+        solutions, graph = self._before(before)
+
+        return Journal(
+            directory=self._directory,
+            graph=graph,
+            solutions=solutions,
+            before=before,
+        ).progress()
 
     def compose(self, iteration: int, move: Move, problem_description: str) -> str:
         """The prompt this iteration's director would be given.
@@ -178,8 +198,7 @@ class Search:
         Which is the point — the prompt is most of what this project is, and
         iterating on it should not cost two model calls a look.
         """
-        solutions = self._store.get_all_solutions()
-        graph = self._graph(solutions)
+        solutions, graph = self._before(iteration)
 
         return compose(
             graph=graph,
@@ -194,6 +213,30 @@ class Search:
             problem_description=problem_description,
             solutions=solutions,
         )
+
+    def _before(self, iteration: int) -> Tuple[List[Solution], Graph]:
+        """The run as it stood going into `iteration`.
+
+        In the loop this is the whole run: nothing has committed for an iteration
+        that has not started. It is the preview that needs the bound, since it is
+        asked about iterations a run is long past — and a prompt that decided its
+        move from the finished run, or drew a tree holding nodes that did not
+        exist yet, would not be the prompt anything was ever shown.
+
+        The tree is cut the same way. `arcs.json` carries no iteration, but a node
+        was minted by the perturbation that first built there, so a node belongs
+        to this point exactly when something has been built for it by now.
+        """
+        solutions = [
+            solution
+            for solution in self._store.get_all_solutions()
+            if solution.iteration is None or solution.iteration < iteration
+        ]
+
+        landed = {solution.node_id for solution in solutions}
+        arcs = [arc for arc in self._arcs.read() if arc.child_node_id in landed]
+
+        return solutions, Graph(arcs, solutions)
 
     def perturb(
         self, iteration: int, move: Move, problem_description: str
@@ -331,8 +374,10 @@ def _invalid(problem: str) -> ValidationResult:
 __all__ = [
     "DEFAULT_KICKS",
     "MINIMUM_CONSTRAINT_CHARACTERS",
+    "PATIENCE",
     "Move",
     "Perturbation",
     "Phase",
+    "Progress",
     "Search",
 ]
