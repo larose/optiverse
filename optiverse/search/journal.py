@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set, cast
 
 from .graph import ROOT_NODE_ID
-from .store import Solution
+from ..solution import Solution
 
 ITERATIONS_DIRECTORY_NAME = "iterations"
 PLAN_NAME = "plan.json"

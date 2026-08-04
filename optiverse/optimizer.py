@@ -3,14 +3,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
-from . import codebase as codebase_helpers
+from .solution import codebase as codebase_helpers
 from .config import OptimizerConfig
 from .evaluator import SCORE, EvaluatorError, ScoreResult
-from .generator import GenerationContext
-from .graph import ROOT_NODE_ID
-from .prompt_generator import DefaultPromptGenerator, PromptGeneratorContext
+from .programmer import GenerationContext
+from .programmer.prompt import DefaultPromptGenerator, PromptGeneratorContext
 from .search import Search
-from .store import FileSystemStore, Solution
+from .search.graph import ROOT_NODE_ID
+from .solution import FileSystemStore, Solution
 
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ class Optimizer:
         prompt = self._prompt_generator.generate(
             PromptGeneratorContext(
                 constraints=self._search.constraints(plan.node_id),
-                problem=self._config.problem,
+                problem_description=self._config.problem.description,
             )
         )
         self._search.write_generator_prompt(iteration, prompt)

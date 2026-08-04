@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, cast
 
 import dataset
-from optiverse.evaluator_main import run
+from optiverse.evaluator.main import run
 
 HARNESS_DIRECTORY = Path(__file__).parent
 

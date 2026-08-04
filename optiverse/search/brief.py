@@ -25,7 +25,7 @@ from .journal import (
     Progress,
 )
 from .metrics import render as render_metrics
-from .store import Solution
+from ..solution import Solution
 
 # About eighty lines. Stated to the director rather than enforced: the ceiling is
 # there to make it rewrite the file instead of appending to it, and a rejection

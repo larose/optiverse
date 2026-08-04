@@ -20,7 +20,7 @@ is a place to look.
 import statistics
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from .store import Solution
+from ..solution import Solution
 
 # Below this there is no correlation worth printing — three points can be
 # perfectly monotone by chance, and a director shown ±1.0 will believe it.

@@ -33,8 +33,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, cast
 
 from .brief import Stage, Turn, compose
-from .director import Director, DirectorContext
-from .evaluator import ValidationResult
+from ..director import Director, DirectorContext
+from ..evaluator import ValidationResult
 from .graph import ROOT_NODE_ID, ArcStore, Graph
 from .journal import (
     CRASHED_SUFFIX,
@@ -48,9 +48,17 @@ from .journal import (
     Journal,
     iteration_directory,
 )
-from .store import Solution, Store
+from ..solution import Solution, Store
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_PLAYBOOK = Path(__file__).parent / "playbook.md"
+"""Angles for inventing a constraint the search has not tried.
+
+Named here rather than beside the rest of the configuration because it is a file
+this package ships and this package reads. A path spelled out somewhere else is
+one that goes stale the next time either end moves.
+"""
 
 # A required string field with no floor under it is satisfied by "ok". The floor
 # is crude and it works; anything cleverer — hunting for a number in an
@@ -454,6 +462,7 @@ def _invalid(problems: List[str]) -> ValidationResult:
 
 
 __all__ = [
+    "DEFAULT_PLAYBOOK",
     "MINIMUM_PROSE_CHARACTERS",
     "Plan",
     "Search",

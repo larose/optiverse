@@ -35,11 +35,19 @@ Homepage = "https://github.com/larose/optiverse"
 Repository = "https://github.com/larose/optiverse"
 
 [tool.setuptools]
-packages = ["optiverse", "optiverse.generators", "optiverse.directors"]
+packages = [
+    "optiverse",
+    "optiverse.director",
+    "optiverse.evaluator",
+    "optiverse.mini_swe_agent",
+    "optiverse.programmer",
+    "optiverse.search",
+    "optiverse.solution",
+]
 
 # The playbook is data, not code, so it is not installed unless it is named.
 [tool.setuptools.package-data]
-optiverse = ["playbook.md"]
+"optiverse.search" = ["playbook.md"]
 
 [tool.black]
 target-version = ['py310']

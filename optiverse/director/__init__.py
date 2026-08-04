@@ -8,6 +8,12 @@ That indirection is not ceremony. A director driving a shell agent has no other
 way to hand anything back, and routing the decision through a file it validates
 means a malformed plan is something the agent is told to fix rather than
 something the loop discovers afterwards.
+
+`AgentDirector` is deliberately not re-exported here, for the same reason
+`AgentGenerator` is not: importing it pulls mini-swe-agent and its dependency
+tree, and the core is meant to import cleanly without it. Import it directly:
+
+    from optiverse.director.agent import AgentDirector
 """
 
 from abc import ABC, abstractmethod
@@ -15,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Union
 
-from .evaluator import ValidationResult
+from ..evaluator import ValidationResult
 
 
 @dataclass(frozen=True)

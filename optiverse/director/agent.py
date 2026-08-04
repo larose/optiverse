@@ -23,7 +23,7 @@ import logging
 import os
 from typing import Any, Dict, Optional, cast
 
-from .._mini_swe_agent import AgentLimits, normalize_exit_status
+from ..mini_swe_agent import AgentLimits, normalize_exit_status
 from ..director import Director, DirectorContext, DirectorResult
 
 logger = logging.getLogger(__name__)
@@ -125,7 +125,9 @@ class AgentDirector(Director):
         # Imported here so the core stays importable without mini-swe-agent.
         from minisweagent.agents.default import DefaultAgent
 
-        from .._mini_swe_agent import SYSTEM_TEMPLATE, ToolEnvironment, build_model
+        from ..mini_swe_agent import SYSTEM_TEMPLATE
+        from ..mini_swe_agent.environment import ToolEnvironment
+        from ..mini_swe_agent.model import build_model
 
         environment = ToolEnvironment(
             baseline_digest=NO_BASELINE_DIGEST,

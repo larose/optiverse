@@ -5,8 +5,8 @@ from datetime import datetime
 from pathlib import Path
 
 import optiverse
-from optiverse.generators.agent import AgentGenerator
-from optiverse.directors.agent import AgentDirector
+from optiverse.programmer.agent import AgentGenerator
+from optiverse.director.agent import AgentDirector
 
 logging.basicConfig(
     level=logging.INFO,

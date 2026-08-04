@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, cast
 
 import instance
-from optiverse.evaluator_main import run
+from optiverse.evaluator.main import run
 
 HARNESS_DIRECTORY = Path(__file__).parent
 HARNESS_FILES = ("context.py", "instance.py", "run.py")

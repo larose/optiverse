@@ -23,9 +23,9 @@ import logging
 import os
 from typing import Any, Dict, Optional, cast
 
-from .. import codebase as codebase_helpers
-from .._mini_swe_agent import AgentLimits, normalize_exit_status
-from ..generator import GenerationContext, GenerationResult, Generator
+from ..solution import codebase as codebase_helpers
+from ..mini_swe_agent import AgentLimits, normalize_exit_status
+from . import GenerationContext, GenerationResult, Generator
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,9 @@ class AgentGenerator(Generator):
         # Imported here so the core stays importable without mini-swe-agent.
         from minisweagent.agents.default import DefaultAgent
 
-        from .._mini_swe_agent import SYSTEM_TEMPLATE, ToolEnvironment, build_model
+        from ..mini_swe_agent import SYSTEM_TEMPLATE
+        from ..mini_swe_agent.environment import ToolEnvironment
+        from ..mini_swe_agent.model import build_model
 
         # Taken after the parent has been copied in, so `validate` refusing to
         # end the turn on an unchanged tree means unchanged *relative to the

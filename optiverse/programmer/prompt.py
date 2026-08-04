@@ -19,8 +19,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Sequence
 
-from .config import Problem
-
 OPENING = """You are one step of an automated search for a better solution to \
 the problem below.
 
@@ -42,7 +40,12 @@ CONSTRAINTS_OPENING = (
 
 @dataclass(frozen=True)
 class PromptGeneratorContext:
-    problem: Problem
+    problem_description: str
+    """The problem statement, not the whole `Problem`.
+
+    Nothing here ever wanted the seed codebase or the evaluator command, and
+    taking the `Problem` would have this module import the configuration that
+    imports this module's package."""
 
     constraints: Sequence[str]
     """Every constraint in force at the node this candidate belongs to, root
@@ -63,7 +66,7 @@ class DefaultPromptGenerator(PromptGenerator):
             "",
             "# The problem",
             "",
-            context.problem.description.strip(),
+            context.problem_description.strip(),
             "",
             "# Your working directory",
             "",

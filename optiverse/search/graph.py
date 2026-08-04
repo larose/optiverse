@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple, cast
 
-from .store import Solution
+from ..solution import Solution
 
 ARCS_NAME = "arcs.json"
 

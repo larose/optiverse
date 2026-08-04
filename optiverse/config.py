@@ -8,11 +8,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
-from .evaluator import EvaluatorCommand
-from .generator import Generator
 from .director import Director
-
-DEFAULT_PLAYBOOK = Path(__file__).parent / "playbook.md"
+from .evaluator import EvaluatorCommand
+from .programmer import Generator
+from .search import DEFAULT_PLAYBOOK
 
 
 @dataclass(frozen=True)

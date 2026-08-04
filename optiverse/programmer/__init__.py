@@ -3,6 +3,12 @@
 A generator is handed a codebase directory holding a copy of the solution it is
 improving, and changes it. Nothing is returned but metadata: the codebase *is*
 the output, and it is already where it belongs.
+
+`AgentGenerator` is deliberately not re-exported here: importing it pulls
+mini-swe-agent and its dependency tree, and the core is meant to import cleanly
+without it. Import it directly:
+
+    from optiverse.programmer.agent import AgentGenerator
 """
 
 from abc import ABC, abstractmethod
@@ -10,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Union
 
-from .evaluator import ValidationResult
+from ..evaluator import ValidationResult
 
 
 @dataclass(frozen=True)

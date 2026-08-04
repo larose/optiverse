@@ -1,6 +1,6 @@
 """Print the prompt a run's next director would be shown.
 
-    python3 -m optiverse.preview <run directory> [iteration]
+    python3 -m optiverse.search.preview <run directory> [iteration]
 
 The director's prompt is most of what this project is, and looking at one
 normally costs two model calls — one to produce the state, one to read the prompt
@@ -19,10 +19,9 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from .config import DEFAULT_PLAYBOOK
-from .director import Director, DirectorContext, DirectorResult
-from .search import Search
-from .store import FileSystemStore
+from . import DEFAULT_PLAYBOOK, Search
+from ..director import Director, DirectorContext, DirectorResult
+from ..solution import FileSystemStore
 
 PLACEHOLDER = (
     "(the problem statement goes here — it is passed in by the loop and is not "

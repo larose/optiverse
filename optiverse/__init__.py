@@ -1,40 +1,31 @@
 """Optiverse: evolve codebases with coding agents.
 
-The core imports nothing outside the standard library. The two things that drive
-a coding agent — `optiverse.generators`, which writes candidates, and
-`optiverse.directors`, which decides what to try next — are imported explicitly.
+One concept per folder. `optiverse.search` is what the run knows and how the
+next move is chosen; `optiverse.director` and `optiverse.programmer` are the two
+agents that drive it; `optiverse.solution` and `optiverse.evaluator` are what a
+candidate is and what scores it.
+
+Everything imported here is standard library only. The two agent
+implementations — `optiverse.director.agent` and `optiverse.programmer.agent` —
+are not, and are deliberately left out, along with `optiverse.mini_swe_agent`
+underneath them: importing any of the three pulls mini-swe-agent and its
+dependency tree, so `import optiverse` costs nothing until you ask by name.
 """
 
-from . import brief
-from . import codebase
 from . import config
 from . import director
 from . import evaluator
-from . import evaluator_main
-from . import generator
-from . import graph
-from . import journal
-from . import metrics
 from . import optimizer
-from . import preview
-from . import prompt_generator
+from . import programmer
 from . import search
-from . import store
+from . import solution
 
 __all__ = [
-    "brief",
-    "codebase",
     "config",
     "director",
     "evaluator",
-    "evaluator_main",
-    "generator",
-    "graph",
-    "journal",
-    "metrics",
     "optimizer",
-    "preview",
-    "prompt_generator",
+    "programmer",
     "search",
-    "store",
+    "solution",
 ]
