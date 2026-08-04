@@ -1,8 +1,8 @@
-"""Prompt construction.
+"""What the programmer is shown.
 
 Everything about *what to do* is assembled here: what the loop is, the problem,
 what is already in the working directory, and the constraints in force. What is
-left to the generator is *how to work* — the tools it has — because that varies
+left to the programmer is *how to work* — the tools it has — because that varies
 with what is driving the codebase.
 
 The prompt carries no scores at all, not the candidate's own and not its
@@ -15,7 +15,6 @@ will differ from its parent, and the search graph is a complete record precisely
 because nothing else is said.
 """
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Sequence
 
@@ -39,7 +38,7 @@ CONSTRAINTS_OPENING = (
 
 
 @dataclass(frozen=True)
-class PromptGeneratorContext:
+class PromptContext:
     problem_description: str
     """The problem statement, not the whole `Problem`.
 
@@ -52,38 +51,40 @@ class PromptGeneratorContext:
     first. Empty at the root, which is the whole space."""
 
 
-class PromptGenerator(ABC):
-    @abstractmethod
-    def generate(self, context: PromptGeneratorContext) -> str: ...
+def build(context: PromptContext) -> str:
+    """The whole prompt, which is a function of the node and nothing else.
+
+    A plain function rather than an interface with one implementation. The two
+    things that *are* interfaces here — `Programmer` and `Director` — are so
+    because they are fields on `OptimizerConfig` and can be substituted; this
+    never was, so an abstract base only made it look as though it could be.
+    """
+    sections: List[str] = [
+        "# What you are doing",
+        "",
+        OPENING,
+        "",
+        "# The problem",
+        "",
+        context.problem_description.strip(),
+        "",
+        "# Your working directory",
+        "",
+        WORKING_DIRECTORY,
+        *_constraints(context),
+    ]
+
+    return "\n".join(sections) + "\n"
 
 
-class DefaultPromptGenerator(PromptGenerator):
-    def generate(self, context: PromptGeneratorContext) -> str:
-        sections: List[str] = [
-            "# What you are doing",
-            "",
-            OPENING,
-            "",
-            "# The problem",
-            "",
-            context.problem_description.strip(),
-            "",
-            "# Your working directory",
-            "",
-            WORKING_DIRECTORY,
-            *self._constraints(context),
-        ]
+def _constraints(context: PromptContext) -> List[str]:
+    if not context.constraints:
+        return []
 
-        return "\n".join(sections) + "\n"
+    lines = ["", "# Your constraints", "", CONSTRAINTS_OPENING, ""]
 
-    def _constraints(self, context: PromptGeneratorContext) -> List[str]:
-        if not context.constraints:
-            return []
+    for constraint in context.constraints:
+        lines.append(constraint.strip())
+        lines.append("")
 
-        lines = ["", "# Your constraints", "", CONSTRAINTS_OPENING, ""]
-
-        for constraint in context.constraints:
-            lines.append(constraint.strip())
-            lines.append("")
-
-        return lines
+    return lines

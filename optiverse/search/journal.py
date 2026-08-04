@@ -40,8 +40,8 @@ MEMORY_NAME = "memory.md"
 # spelled out at the second one is a link that breaks silently.
 DIRECTOR_PROMPT_NAME = "director-prompt.md"
 DIRECTOR_LOG_NAME = "director.log"
-GENERATOR_PROMPT_NAME = "generator-prompt.md"
-GENERATOR_LOG_NAME = "generator.log"
+PROGRAMMER_PROMPT_NAME = "programmer-prompt.md"
+PROGRAMMER_LOG_NAME = "programmer.log"
 
 # What a set-aside attempt is called: `00079_crashed_1`, beside `00079`.
 CRASHED_SUFFIX = "_crashed_"

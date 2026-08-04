@@ -6,8 +6,8 @@ from typing import cast
 from .solution import codebase as codebase_helpers
 from .config import OptimizerConfig
 from .evaluator import SCORE, EvaluatorError, ScoreResult
-from .programmer import GenerationContext
-from .programmer.prompt import DefaultPromptGenerator, PromptGeneratorContext
+from .programmer import ProgrammerContext
+from .programmer import prompt as programmer_prompt
 from .search import Search
 from .search.graph import ROOT_NODE_ID
 from .solution import FileSystemStore, Solution
@@ -25,9 +25,8 @@ class Optimizer:
         self._config = config
 
         self._store = FileSystemStore(directory=config.directory)
-        self._prompt_generator = DefaultPromptGenerator()
         self._evaluator = config.problem.evaluator()
-        self._generator = config.generator
+        self._programmer = config.programmer
         self._search = Search(
             directory=config.directory,
             director=config.director,
@@ -61,18 +60,18 @@ class Optimizer:
             self._store.codebase_path(plan.parent_solution_id), codebase
         )
 
-        prompt = self._prompt_generator.generate(
-            PromptGeneratorContext(
+        prompt = programmer_prompt.build(
+            programmer_prompt.PromptContext(
                 constraints=self._search.constraints(plan.node_id),
                 problem_description=self._config.problem.description,
             )
         )
-        self._search.write_generator_prompt(iteration, prompt)
+        self._search.write_programmer_prompt(iteration, prompt)
 
-        generation_result = self._generator.generate(
-            GenerationContext(
+        programmer_result = self._programmer.write(
+            ProgrammerContext(
                 codebase=codebase,
-                log_path=self._search.generator_log_path(iteration),
+                log_path=self._search.programmer_log_path(iteration),
                 prompt=prompt,
                 validate=lambda: self._evaluator.validate(codebase),
             )
@@ -83,12 +82,12 @@ class Optimizer:
         self._store.commit(
             solution_id,
             iteration=iteration,
-            metrics={**score_result.metrics, **generation_result.metrics},
+            metrics={**score_result.metrics, **programmer_result.metrics},
             node_id=plan.node_id,
             parent_solution_id=plan.parent_solution_id,
             score=score_result.score,
             started_at=started_at,
-            tags={**search_result.tags, **generation_result.tags},
+            tags={**search_result.tags, **programmer_result.tags},
         )
 
         if score_result.score is None:

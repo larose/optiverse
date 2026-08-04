@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from .graph import ROOT_NODE_ID, Graph, Node, current_node
 from .journal import (
-    GENERATOR_LOG_NAME,
+    PROGRAMMER_LOG_NAME,
     MEMORY_NAME,
     PLAN_NAME,
     WINDOW,
@@ -181,7 +181,7 @@ def compose(
         "# Where things are",
         "",
         LAYOUT.format(
-            generator_log=GENERATOR_LOG_NAME, memory=MEMORY_NAME, plan=PLAN_NAME
+            programmer_log=PROGRAMMER_LOG_NAME, memory=MEMORY_NAME, plan=PLAN_NAME
         ),
         "",
         "# What to do",
@@ -673,6 +673,6 @@ in the run.
 - `../../solutions.csv` — every candidate, best score first.
 - `../../solutions/<id>/code/` — a candidate's source.
 - `../../solutions/<id>/metadata.json` — its score, metrics and lineage.
-- `../<earlier>/{generator_log}` — what a coding agent did and saw.
+- `../<earlier>/{programmer_log}` — what a coding agent did and saw.
 - `../<earlier>/director.log`, `../<earlier>/{plan}` — what you did then.
 - `../<earlier>_crashed_<n>/` — an attempt that was set aside."""

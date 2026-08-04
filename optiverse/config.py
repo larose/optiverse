@@ -10,7 +10,7 @@ from typing import Sequence
 
 from .director import Director
 from .evaluator import EvaluatorCommand
-from .programmer import Generator
+from .programmer import Programmer
 from .search import DEFAULT_PLAYBOOK
 
 
@@ -37,7 +37,7 @@ class Problem:
 @dataclass(frozen=True)
 class OptimizerConfig:
     directory: Path
-    generator: Generator
+    programmer: Programmer
     max_iterations: int
     problem: Problem
     director: Director

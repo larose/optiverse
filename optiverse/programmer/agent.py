@@ -25,11 +25,12 @@ from typing import Any, Dict, Optional, cast
 
 from ..solution import codebase as codebase_helpers
 from ..mini_swe_agent import AgentLimits, normalize_exit_status
-from . import GenerationContext, GenerationResult, Generator
+from . import ProgrammerContext, ProgrammerResult, Programmer
 
 logger = logging.getLogger(__name__)
 
-MODEL_VARIABLE = "OPTIVERSE_MODEL"
+MODEL_VARIABLE = "OPTIVERSE_PROGRAMMER_MODEL"
+FALLBACK_MODEL_VARIABLE = "OPTIVERSE_MODEL"
 
 INSTANCE_TEMPLATE = """{{task}}
 
@@ -67,7 +68,7 @@ View part of one:
 """
 
 
-class AgentGenerator(Generator):
+class AgentProgrammer(Programmer):
     def __init__(
         self,
         *,
@@ -78,21 +79,29 @@ class AgentGenerator(Generator):
         self._limits = limits or AgentLimits()
 
     @classmethod
-    def from_env(cls, *, limits: Optional[AgentLimits] = None) -> "AgentGenerator":
-        """Build from `OPTIVERSE_MODEL`, a litellm model name.
+    def from_env(cls, *, limits: Optional[AgentLimits] = None) -> "AgentProgrammer":
+        """Build from `OPTIVERSE_PROGRAMMER_MODEL`, falling back to the shared one.
+
+        The same shape the director has, for the same reason: the two jobs do not
+        want the same model — writing code is long and mostly output, planning is
+        the reverse — and falling back means it stays one variable until you care.
 
         Credentials are the provider's own environment variables, set the way that
         provider's documentation says — `GEMINI_API_KEY` for `gemini/...`,
         `ANTHROPIC_API_KEY` for `anthropic/...`, `OLLAMA_API_BASE` for a local
         server. litellm reads them itself, so there is nothing to pass through.
         """
-        model_name = os.getenv(MODEL_VARIABLE)
+        model_name = os.getenv(MODEL_VARIABLE) or os.getenv(FALLBACK_MODEL_VARIABLE)
+
         if not model_name:
-            raise ValueError(f"{MODEL_VARIABLE} environment variable is required")
+            raise ValueError(
+                f"{MODEL_VARIABLE} or {FALLBACK_MODEL_VARIABLE} "
+                "environment variable is required"
+            )
 
         return cls(model_name=model_name, limits=limits)
 
-    def generate(self, context: GenerationContext) -> GenerationResult:
+    def write(self, context: ProgrammerContext) -> ProgrammerResult:
         # Imported here so the core stays importable without mini-swe-agent.
         from minisweagent.agents.default import DefaultAgent
 
@@ -126,15 +135,15 @@ class AgentGenerator(Generator):
 
         exit_status = self._run(agent, context)
 
-        return GenerationResult(
+        return ProgrammerResult(
             metrics={
-                "agent_model_calls": int(agent.n_calls),
-                "agent_validate_runs": environment.validate_runs,
+                "programmer_model_calls": int(agent.n_calls),
+                "programmer_validate_runs": environment.validate_runs,
             },
-            tags={"exit_status": exit_status},
+            tags={"programmer_exit_status": exit_status},
         )
 
-    def _run(self, agent: Any, context: GenerationContext) -> str:
+    def _run(self, agent: Any, context: ProgrammerContext) -> str:
         """Run the agent, treating any failure as a normal outcome.
 
         Whatever is on disk is scored regardless, so a crashed or exhausted agent

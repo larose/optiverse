@@ -10,7 +10,7 @@ means a malformed plan is something the agent is told to fix rather than
 something the loop discovers afterwards.
 
 `AgentDirector` is deliberately not re-exported here, for the same reason
-`AgentGenerator` is not: importing it pulls mini-swe-agent and its dependency
+`AgentProgrammer` is not: importing it pulls mini-swe-agent and its dependency
 tree, and the core is meant to import cleanly without it. Import it directly:
 
     from optiverse.director.agent import AgentDirector

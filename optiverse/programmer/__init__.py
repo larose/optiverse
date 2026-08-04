@@ -4,11 +4,11 @@ A generator is handed a codebase directory holding a copy of the solution it is
 improving, and changes it. Nothing is returned but metadata: the codebase *is*
 the output, and it is already where it belongs.
 
-`AgentGenerator` is deliberately not re-exported here: importing it pulls
+`AgentProgrammer` is deliberately not re-exported here: importing it pulls
 mini-swe-agent and its dependency tree, and the core is meant to import cleanly
 without it. Import it directly:
 
-    from optiverse.programmer.agent import AgentGenerator
+    from optiverse.programmer.agent import AgentProgrammer
 """
 
 from abc import ABC, abstractmethod
@@ -20,7 +20,7 @@ from ..evaluator import ValidationResult
 
 
 @dataclass(frozen=True)
-class GenerationContext:
+class ProgrammerContext:
     codebase: Path
     """The working directory, holding a copy of the parent solution. Whatever
     ends up here is the new solution."""
@@ -38,7 +38,7 @@ class GenerationContext:
 
 
 @dataclass(frozen=True)
-class GenerationResult:
+class ProgrammerResult:
     metrics: Dict[str, Union[int, float]]
     """Cost and call counts. Surface as m_* columns in solutions.csv."""
 
@@ -46,6 +46,6 @@ class GenerationResult:
     """Categorical outcomes, such as the agent's exit status."""
 
 
-class Generator(ABC):
+class Programmer(ABC):
     @abstractmethod
-    def generate(self, context: GenerationContext) -> GenerationResult: ...
+    def write(self, context: ProgrammerContext) -> ProgrammerResult: ...

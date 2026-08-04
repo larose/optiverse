@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import optiverse
-from optiverse.programmer.agent import AgentGenerator
+from optiverse.programmer.agent import AgentProgrammer
 from optiverse.director.agent import AgentDirector
 
 logging.basicConfig(
@@ -50,7 +50,7 @@ def main() -> None:
 
     config = optiverse.config.OptimizerConfig(
         directory=directory,
-        generator=AgentGenerator.from_env(),
+        programmer=AgentProgrammer.from_env(),
         max_iterations=1000,
         problem=problem,
         director=AgentDirector.from_env(),

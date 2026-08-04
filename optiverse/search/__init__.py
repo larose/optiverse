@@ -40,8 +40,8 @@ from .journal import (
     CRASHED_SUFFIX,
     DIRECTOR_LOG_NAME,
     DIRECTOR_PROMPT_NAME,
-    GENERATOR_LOG_NAME,
-    GENERATOR_PROMPT_NAME,
+    PROGRAMMER_LOG_NAME,
+    PROGRAMMER_PROMPT_NAME,
     ITERATIONS_DIRECTORY_NAME,
     MEMORY_NAME,
     PLAN_NAME,
@@ -120,11 +120,13 @@ class Search:
     def plan_path(self, iteration: int) -> Path:
         return self.iteration_directory(iteration) / PLAN_NAME
 
-    def generator_log_path(self, iteration: int) -> Path:
-        return self.iteration_directory(iteration) / GENERATOR_LOG_NAME
+    def programmer_log_path(self, iteration: int) -> Path:
+        return self.iteration_directory(iteration) / PROGRAMMER_LOG_NAME
 
-    def write_generator_prompt(self, iteration: int, prompt: str) -> None:
-        (self.iteration_directory(iteration) / GENERATOR_PROMPT_NAME).write_text(prompt)
+    def write_programmer_prompt(self, iteration: int, prompt: str) -> None:
+        (self.iteration_directory(iteration) / PROGRAMMER_PROMPT_NAME).write_text(
+            prompt
+        )
 
     # --- the graph -----------------------------------------------------------
 
