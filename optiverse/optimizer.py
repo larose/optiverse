@@ -64,7 +64,6 @@ class Optimizer:
         prompt = self._prompt_generator.generate(
             PromptGeneratorContext(
                 constraints=self._search.constraints(plan.node_id),
-                memory=plan.memory,
                 problem=self._config.problem,
             )
         )
@@ -75,9 +74,6 @@ class Optimizer:
                 codebase=codebase,
                 log_path=self._search.generator_log_path(iteration),
                 prompt=prompt,
-                remember=lambda text: self._search.remember(
-                    iteration, "generator", text
-                ),
                 validate=lambda: self._evaluator.validate(codebase),
             )
         )

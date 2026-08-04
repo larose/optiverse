@@ -46,9 +46,8 @@ Each iteration:
    free-form brief: if it wants the agent to do something, that is a constraint,
    and a constraint is a node.
 2. The chosen solution's code is copied into the agent's working directory, and
-   the agent changes it. It has five tools — `bash`, `validate`, `remember`,
-   `done` and `give_up` — and `done` is refused until its work both differs from
-   what it was handed and validates.
+   the agent changes it. It has three tools — `bash`, `validate` and `give_up` —
+   and its turn ends when `validate` reports valid on something it changed.
 3. Optiverse scores the result and files it under the node it belongs to.
 
 The node and the solution are chosen separately and need not match. A node the
@@ -60,10 +59,8 @@ The director sees every score; the coding agent sees none — not its own, not i
 parent's. Ranking is the director's job, and an agent that could see a score
 would abandon a novel approach the moment it looked worse than the incumbent.
 
-**Both agents can `remember`.** It appends a line to `memory.md`: a build rule, a
-constraint of the environment, a mistake that cost time. The director reads it
-and passes on what bears on the next attempt. Nothing else in a run survives an
-iteration.
+Nothing an agent works out survives its turn. What carries between iterations is
+the tree, the scores and the code — everything else is in a log for you to read.
 
 ## Quick start
 
@@ -115,7 +112,6 @@ Each run writes to `tmp/YYYYMMDD_HHMMSS`, named for when it started:
 ```
 tmp/20260730_133833/
   arcs.json                         the tree: (parent, child, constraint) triplets
-  memory.md                         what both agents learned the hard way
   solutions.csv                     the population, best score first
   solutions/s_<id>/
     code/                           the solution itself

@@ -11,9 +11,9 @@ than half of it.
 means writing a file; everything in it lands in `arcs.json` or the solution's
 metadata. It is left on disk afterwards because nothing in a run is deleted.
 
-Nothing here keeps state between iterations. The tree comes from `arcs.json`, the
-scores from the solutions, and the only thing that survives an agent's turn is
-what it wrote to `memory.md`.
+Nothing here keeps state between iterations, and nothing an agent learns survives
+its turn. The tree comes from `arcs.json` and the scores from the solutions; what
+either agent worked out along the way is in its log and nowhere else.
 """
 
 import json
@@ -25,13 +25,12 @@ from typing import Dict, List, Optional, Union, cast
 
 from .director import Director, DirectorContext
 from .evaluator import ValidationResult
-from .graph import ROOT_NODE_ID, ArcStore, Graph, Node, current_node, similar
+from .graph import ROOT_NODE_ID, ArcStore, Graph, Node, current_node
 from .store import Solution, Store
 
 logger = logging.getLogger(__name__)
 
 ITERATIONS_DIRECTORY_NAME = "iterations"
-MEMORY_NAME = "memory.md"
 PLAN_NAME = "plan.json"
 
 DIRECTOR_PROMPT_NAME = "director-prompt.md"
@@ -47,10 +46,6 @@ CRASHED_SUFFIX = "_crashed_"
 # four digits, `10000` would sort ahead of `9999`.
 ITERATION_NUMBER_WIDTH = 5
 
-# Two constraints this similar are probably the same idea retyped. Warned about,
-# never rejected: sometimes the reword is the point.
-REWORD_SIMILARITY = 0.9
-
 
 @dataclass(frozen=True)
 class Plan:
@@ -62,7 +57,6 @@ class Plan:
 
     node_id: str
     parent_solution_id: str
-    memory: List[str]
 
 
 @dataclass(frozen=True)
@@ -99,10 +93,6 @@ class Search:
 
     # --- paths --------------------------------------------------------------
 
-    @property
-    def memory_path(self) -> Path:
-        return self._directory / MEMORY_NAME
-
     def iteration_directory(self, iteration: int) -> Path:
         name = f"{iteration:0{ITERATION_NUMBER_WIDTH}d}"
         return self._directory / ITERATIONS_DIRECTORY_NAME / name
@@ -125,29 +115,6 @@ class Search:
         assembled from the graph rather than from a copy kept alongside it.
         """
         return self._graph(self._store.get_all_solutions()).node(node_id).constraints
-
-    # --- memory -------------------------------------------------------------
-
-    def remember(self, iteration: int, author: str, text: str) -> None:
-        """Append one line to `memory.md`.
-
-        Both agents write here and neither reads what the other wrote, so entries
-        repeat. Pruning is the director's job — `memory.md` is the one file
-        outside its working directory it is allowed to edit.
-        """
-        entry = " ".join(text.split())
-
-        if not entry:
-            return
-
-        with open(self.memory_path, "a") as memory_file:
-            memory_file.write(f"- (iteration {iteration}, {author}) {entry}\n")
-
-    def memory(self) -> str:
-        if not self.memory_path.is_file():
-            return ""
-
-        return self.memory_path.read_text().strip()
 
     # --- the loop's interface -----------------------------------------------
 
@@ -183,7 +150,6 @@ class Search:
             DirectorContext(
                 log_path=directory / DIRECTOR_LOG_NAME,
                 prompt=prompt,
-                remember=lambda text: self.remember(iteration, "director", text),
                 validate=lambda: self.validate(iteration),
                 workdir=directory,
             )
@@ -256,9 +222,9 @@ class Search:
     def validate(self, iteration: int) -> ValidationResult:
         """Whether `plan.json` is usable, and what is wrong with it.
 
-        Rejections are things the loop cannot act on. The reword check only
-        warns: a constraint that reads like a sibling's is usually a retype, but
-        sometimes the difference is the whole point, and code cannot tell which.
+        Everything it reports is something the loop cannot act on, because a
+        valid plan ends the director's turn — there is nowhere for a remark it
+        might have taken or left to go.
         """
         path = self.plan_path(iteration)
 
@@ -285,7 +251,6 @@ class Search:
                 f"`parent_node_id` must name a node that exists. "
                 f"{ROOT_NODE_ID} always does."
             )
-            parent_node_id = None
 
         parent_solution_id = fields.get("parent_solution_id")
         if not isinstance(parent_solution_id, str) or parent_solution_id not in {
@@ -301,40 +266,11 @@ class Search:
                 "`constraint`, if given, must be a non-empty string. Leave it out "
                 "to try the same node again."
             )
-            constraint = None
-
-        problems.extend(_memory_problems(fields))
 
         if problems:
             return _invalid(problems)
 
-        return _valid(self._reword_warning(graph, parent_node_id, constraint))
-
-    def _reword_warning(
-        self,
-        graph: Graph,
-        parent_node_id: Optional[str],
-        constraint: object,
-    ) -> List[str]:
-        if not isinstance(constraint, str) or parent_node_id is None:
-            return []
-
-        existing = [
-            child.constraint
-            for child in graph.children(parent_node_id)
-            if child.constraint is not None
-        ]
-
-        if not similar(constraint, existing, REWORD_SIMILARITY):
-            return []
-
-        return [
-            "This constraint reads like one already on a sibling of "
-            f"{parent_node_id}, which would start a second node for the same "
-            "idea rather than adding to the one that exists. If you meant to "
-            "continue that one, name it in `parent_node_id` and leave "
-            "`constraint` out. If the rewording is the point, carry on."
-        ]
+        return ValidationResult(valid=True, log="")
 
     # --- applying the plan ---------------------------------------------------
 
@@ -367,7 +303,6 @@ class Search:
         return Plan(
             node_id=node_id,
             parent_solution_id=cast(str, fields["parent_solution_id"]),
-            memory=[str(line) for line in cast(List[object], fields.get("memory", []))],
         )
 
     # --- the playbook --------------------------------------------------------
@@ -425,17 +360,11 @@ class Search:
             "",
             "# What to write",
             "",
-            PLAN_INSTRUCTIONS.format(memory=MEMORY_NAME, plan=PLAN_NAME),
-            "",
-            "# What you have learned",
-            "",
-            self.memory() or f"`{MEMORY_NAME}` is empty. `remember` starts it.",
-            "",
-            MEMORY_INSTRUCTIONS.format(memory=MEMORY_NAME),
+            PLAN_INSTRUCTIONS.format(plan=PLAN_NAME),
             "",
             "# Where things are",
             "",
-            LAYOUT.format(memory=MEMORY_NAME, plan=PLAN_NAME),
+            LAYOUT.format(plan=PLAN_NAME),
         ]
 
         if self._playbook_angle is not None:
@@ -469,24 +398,6 @@ def _where(node: Node) -> str:
         f"{line} It is still paying off, so continue it unless you have a reason "
         "not to."
     )
-
-
-def _memory_problems(fields: Dict[str, object]) -> List[str]:
-    raw = fields.get("memory", [])
-
-    if not isinstance(raw, list):
-        return ["`memory`, if given, must be a list of strings."]
-
-    lines = cast(List[object], raw)
-
-    if any(not isinstance(line, str) or not line.strip() for line in lines):
-        return ["Every entry in `memory` must be a non-empty string."]
-
-    return []
-
-
-def _valid(warnings: List[str]) -> ValidationResult:
-    return ValidationResult(valid=True, log="\n".join(warnings))
 
 
 def _invalid(problems: List[str]) -> ValidationResult:
@@ -551,8 +462,7 @@ PLAN_INSTRUCTIONS = """Write `{plan}` in your working directory:
 {{
   "parent_node_id": "n_…",
   "parent_solution_id": "s_…",
-  "constraint": "…",
-  "memory": ["…"]
+  "constraint": "…"
 }}
 ```
 
@@ -563,26 +473,14 @@ PLAN_INSTRUCTIONS = """Write `{plan}` in your working directory:
 - `constraint` — optional. Leave it out to try `parent_node_id` again. Give one
   to create a child of `parent_node_id` and work there instead. This is the only
   way a node is ever created.
-- `memory` — optional. Lines lifted from `{memory}` that bear on this attempt;
-  they are copied into the coding agent's prompt. Facts about the environment
-  only — a build rule, something that does not work here. Never an instruction
-  about what to build, which is what a constraint is for.
 
-Call `validate` to check it, then `done`."""
+Call `validate` when you have written it. It says what is wrong with the plan, or
+ends your turn if there is nothing wrong."""
 
-MEMORY_INSTRUCTIONS = """`{memory}` is what both you and the coding agents have
-learned the hard way. Add to it with `remember`. The coding agents write to it
-without ever seeing it, so it repeats itself — pruning is yours, and it is the
-one file outside your working directory you may edit.
-
-They never read it either, so anything a coding agent needs to know this time has
-to go through `memory` in the plan."""
-
-LAYOUT = """You are in this iteration's own directory. You own `{plan}` in it,
-and `../../{memory}`. Read anything else in the run; write nothing else.
+LAYOUT = """You are in this iteration's own directory, and `{plan}` in it is the
+only thing you write. Read anything else in the run.
 
 - `{plan}` — what you write this iteration.
-- `../../{memory}` — what has been learned. Shown above.
 - `../../arcs.json` — the tree, as (parent, child, constraint) triplets.
 - `../../solutions.csv` — every candidate, best score first.
 - `../../solutions/<id>/code/` — a candidate's source.

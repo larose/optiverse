@@ -22,13 +22,6 @@ class GenerationContext:
     log_path: Path
     prompt: str
 
-    remember: Callable[[str], None]
-    """Record something worth carrying to a later iteration — a build rule, a
-    constraint of the environment, a mistake that cost time.
-
-    Every coding agent starts knowing nothing, and this is the only way anything
-    it learns outlives its turn."""
-
     validate: Callable[[], ValidationResult]
     """Whether `codebase` is currently valid, and what the evaluator said.
 

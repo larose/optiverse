@@ -23,12 +23,6 @@ class DirectorContext:
     log_path: Path
     prompt: str
 
-    remember: Callable[[str], None]
-    """Record something worth carrying to a later iteration.
-
-    The same contract the generator's `remember` has. What it writes is the only
-    thing in a run that survives an iteration."""
-
     validate: Callable[[], ValidationResult]
     """Whether the plan currently on disk is usable, and what was wrong if not.
 

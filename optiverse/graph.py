@@ -22,7 +22,6 @@ Solutions are not stored here — they carry a `node_id` and this reads it. A
 node's statistics are therefore always computed, never maintained.
 """
 
-import difflib
 import json
 import statistics
 import uuid
@@ -299,25 +298,6 @@ class ArcStore:
         )
 
         return child_node_id
-
-
-def similar(constraint: str, others: Sequence[str], threshold: float) -> bool:
-    """Whether `constraint` reads like one of `others`.
-
-    Only ever a warning. A near-duplicate is usually a retype, but sometimes the
-    difference is the whole point and code cannot tell which.
-    """
-    normalized = _normalize(constraint)
-
-    return any(
-        difflib.SequenceMatcher(None, normalized, _normalize(other)).ratio()
-        >= threshold
-        for other in others
-    )
-
-
-def _normalize(constraint: str) -> str:
-    return " ".join(constraint.split()).lower()
 
 
 def current_node(graph: Graph, solutions: Sequence[Solution]) -> str:

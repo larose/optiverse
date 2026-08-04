@@ -9,8 +9,8 @@ Unlike the generator it *is* shown the scores, because ranking is its job. The
 generator is kept ignorant of them so it cannot abandon a novel approach for
 looking worse than the incumbent; the director exists to make exactly that call.
 
-It is read-only outside its own directory and `memory.md` by convention rather
-than by enforcement.
+It is read-only outside its own directory by convention rather than by
+enforcement.
 
 mini-swe-agent annotates several signatures with bare `dict`, which strict mode
 reports as partially unknown. That looseness is in the dependency, not here, so
@@ -36,7 +36,7 @@ FALLBACK_MODEL_VARIABLE = "OPTIVERSE_MODEL"
 # forty steps to pick a direction, the tree it was given is the problem.
 DEFAULT_LIMITS = AgentLimits(step_limit=25, wall_time_limit_seconds=600)
 
-# `done` refuses to end a turn on an unchanged tree, which stops a generator
+# `validate` refuses to end a turn on an unchanged tree, which stops a generator
 # submitting the parent it was handed. The director has no equivalent hazard —
 # the plan it validates is the plan it just wrote — so the guard is switched off
 # with a digest nothing can produce, `digest` always returning a full hex hash.
@@ -46,14 +46,13 @@ INSTANCE_TEMPLATE = """{{task}}
 
 # Rules
 
-- Write only inside your working directory, plus `../../memory.md`. Everything
-  else in the run directory is there for you to read, and reading it is the
-  point.
+- Write only inside your working directory. Everything else in the run directory
+  is there for you to read, and reading it is the point.
 - Directory and environment variable changes are not persistent. Every `bash`
   call runs in a new subshell, starting in your working directory.
-- Call `validate` to check the plan you have written. It reports what is wrong
-  with `plan.json`, or nothing if it is fine. It does not end your turn.
-- Call `done` once the plan is valid, or `give_up` if you cannot write one.
+- Call `validate` once you have written `plan.json`. It reports what is wrong
+  with it, and ends your turn if there is nothing wrong.
+- Call `give_up` if you cannot write a plan.
 
 <system_information>
 {{system}} {{release}} {{version}} {{machine}}
@@ -116,7 +115,6 @@ class AgentDirector(Director):
             baseline_digest=NO_BASELINE_DIGEST,
             codebase=context.workdir,
             cwd=str(context.workdir),
-            remember=context.remember,
             timeout=self._limits.command_timeout_seconds,
             validate=context.validate,
         )
@@ -140,11 +138,11 @@ class AgentDirector(Director):
         )
 
     def _run(self, agent: Any, context: DirectorContext) -> str:
-        """Run the agent, treating any failure as a normal outcome.
+        """Run the agent, reporting a failure rather than raising through.
 
-        A director that crashes leaves no plan, and the search falls back to
-        another attempt at the best solution — a weak iteration rather than a
-        lost one.
+        A director that crashes leaves no plan, which the loop treats as a
+        crashed iteration: there is deliberately nothing to fall back to. The
+        exit status is what says which kind of failure it was.
         """
         try:
             outcome = cast(Dict[str, Any], agent.run(task=context.prompt))

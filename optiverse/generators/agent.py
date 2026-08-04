@@ -1,7 +1,7 @@
 """Generation by a coding agent, over mini-swe-agent.
 
 The agent is given a working directory holding a copy of the solution it is
-improving, and five tools. It is never given a score — not its own, not its
+improving, and three tools. It is never given a score — not its own, not its
 parent's. Ranking is the search loop's job, and an agent that could see the
 score would abandon a novel approach the moment it looked worse than the
 incumbent, which is exactly the move the loop relies on to escape local optima.
@@ -42,13 +42,12 @@ INSTANCE_TEMPLATE = """{{task}}
   call runs in a new subshell, starting in your working directory. Prefix a call
   with `MY_ENV_VAR=MY_VALUE cd /path/to/dir && ...` if you need either to stick.
 - Call `validate` whenever you want to know whether your work holds up. It
-  answers valid or invalid and prints diagnostics, and it does not end your turn.
-  It is also the only way to run anything belonging to this problem — there is no
-  way to time or measure your own solution.
-- Call `remember` when you learn something the next agent would want to know
-  before it starts. It has none of your context and cannot see this turn.
-- Call `done` when your work is valid and differs from what you found here. Call
-  `give_up` rather than burning steps on something you cannot get to work.
+  answers valid or invalid and prints diagnostics. It is also the only way to run
+  anything belonging to this problem — there is no way to time or measure your
+  own solution.
+- Your turn ends the moment `validate` reports valid on something you changed,
+  so run it when you are finished, not to check a half-written edit.
+- Call `give_up` rather than burning steps on something you cannot get to work.
 
 <system_information>
 {{system}} {{release}} {{version}} {{machine}}
@@ -99,15 +98,15 @@ class AgentGenerator(Generator):
 
         from .._mini_swe_agent import SYSTEM_TEMPLATE, ToolEnvironment, build_model
 
-        # Taken after the parent has been copied in, so `done` refusing an
-        # unchanged tree means unchanged *relative to the parent*.
+        # Taken after the parent has been copied in, so `validate` refusing to
+        # end the turn on an unchanged tree means unchanged *relative to the
+        # parent*.
         baseline_digest = codebase_helpers.digest(context.codebase)
 
         environment = ToolEnvironment(
             baseline_digest=baseline_digest,
             codebase=context.codebase,
             cwd=str(context.codebase),
-            remember=context.remember,
             timeout=self._limits.command_timeout_seconds,
             validate=context.validate,
         )

@@ -39,11 +39,6 @@ CONSTRAINTS_OPENING = (
     "point of this attempt."
 )
 
-MEMORY_OPENING = (
-    "Learned on earlier attempts at this problem. None of it is about what to "
-    "build; it is what has already cost somebody time."
-)
-
 
 @dataclass(frozen=True)
 class PromptGeneratorContext:
@@ -52,9 +47,6 @@ class PromptGeneratorContext:
     constraints: Sequence[str]
     """Every constraint in force at the node this candidate belongs to, root
     first. Empty at the root, which is the whole space."""
-
-    memory: Sequence[str]
-    """What the director thought worth passing on from `memory.md`."""
 
 
 class PromptGenerator(ABC):
@@ -77,7 +69,6 @@ class DefaultPromptGenerator(PromptGenerator):
             "",
             WORKING_DIRECTORY,
             *self._constraints(context),
-            *self._memory(context),
         ]
 
         return "\n".join(sections) + "\n"
@@ -91,14 +82,5 @@ class DefaultPromptGenerator(PromptGenerator):
         for constraint in context.constraints:
             lines.append(constraint.strip())
             lines.append("")
-
-        return lines
-
-    def _memory(self, context: PromptGeneratorContext) -> List[str]:
-        if not context.memory:
-            return []
-
-        lines = ["", "# What is already known", "", MEMORY_OPENING, ""]
-        lines += [f"- {line.strip()}" for line in context.memory]
 
         return lines

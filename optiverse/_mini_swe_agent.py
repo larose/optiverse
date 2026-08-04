@@ -3,7 +3,7 @@
 Two things in this project are driven by a coding agent: the generator, which
 writes a candidate, and the director, which decides what to try next. They differ
 in their templates and their working directory, not in their plumbing, so the
-model layer, the limits and the five tools live here.
+model layer, the limits and the three tools live here.
 
 Every one of those tools is a tool. Nothing is a word the agent is asked to type
 into a shell that has no such program — not the check, not the give-up. A model
@@ -35,63 +35,27 @@ from .evaluator import EvaluatorError, ValidationResult
 
 logger = logging.getLogger(__name__)
 
-DONE_EXIT_STATUS = "done"
+VALIDATED_EXIT_STATUS = "validated"
 GAVE_UP_EXIT_STATUS = "gave_up"
 
 BASH_TOOL_NAME = "bash"
 VALIDATE_TOOL_NAME = "validate"
-REMEMBER_TOOL_NAME = "remember"
-DONE_TOOL_NAME = "done"
 GIVE_UP_TOOL_NAME = "give_up"
 
-# `bash` is mini-swe-agent's own; the other four are ours. `validate` reports and
-# nothing more — were it to end the turn, an agent that had just fixed something
-# would have no chance to write down what it learned.
+# `bash` is mini-swe-agent's own; the other two are ours. `validate` is both the
+# check and the ordinary way a turn ends: an agent that has produced something
+# valid and different from what it was handed is finished, and continuing would
+# only let it hill-climb on a score it cannot see.
 VALIDATE_TOOL: Dict[str, Any] = {
     "type": "function",
     "function": {
         "name": VALIDATE_TOOL_NAME,
         "description": (
             "Check your work. Answers valid or invalid and prints diagnostics; "
-            "it says nothing about how good the result is. Call it as often as "
-            "you like. It does not end your turn."
+            "it says nothing about how good the result is. Your turn ends the "
+            "moment it reports valid on something you changed."
         ),
         # It takes none, and the schema is the place to say so.
-        "parameters": {"type": "object", "properties": {}, "required": []},
-    },
-}
-
-REMEMBER_TOOL: Dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": REMEMBER_TOOL_NAME,
-        "description": (
-            "Record something you would have wanted to know before you started: "
-            "a constraint of the environment, a build rule, a mistake that cost "
-            "you time. Not what you did, and not how it went. Whoever works on "
-            "this next has none of your context."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "text": {
-                    "type": "string",
-                    "description": "One or two sentences, self-contained.",
-                }
-            },
-            "required": ["text"],
-        },
-    },
-}
-
-DONE_TOOL: Dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": DONE_TOOL_NAME,
-        "description": (
-            "Finish. Allowed once your work is valid and differs from what you "
-            "started with; otherwise it says why not and you keep working."
-        ),
         "parameters": {"type": "object", "properties": {}, "required": []},
     },
 }
@@ -117,13 +81,7 @@ GIVE_UP_TOOL: Dict[str, Any] = {
     },
 }
 
-TOOLS: List[Dict[str, Any]] = [
-    BASH_TOOL,
-    VALIDATE_TOOL,
-    REMEMBER_TOOL,
-    DONE_TOOL,
-    GIVE_UP_TOOL,
-]
+TOOLS: List[Dict[str, Any]] = [BASH_TOOL, VALIDATE_TOOL, GIVE_UP_TOOL]
 
 # mini-swe-agent's own system template describes the ```mswea_bash_command fence
 # its text-based model layer parses out of prose. There is no fence here: the
@@ -134,20 +92,15 @@ Act by calling a tool. Explain your reasoning before each call.
 """
 
 # Worded here rather than through `format_error_template`, whose default relays
-# mini-swe-agent's own bash-only phrasing to a model that has five tools.
+# mini-swe-agent's own bash-only phrasing to a model that has three tools.
 FORMAT_ERROR_NOTICE = (
-    "Every response must call a tool: `bash`, `validate`, `remember`, `done` or "
-    "`give_up`."
+    "Every response must call a tool: `bash`, `validate` or `give_up`."
 )
 
 UNCHANGED_NOTICE = (
-    "[optiverse] Nothing here differs from what you started with, so there is "
-    "nothing to finish. Make a real change first."
+    "\n\n[optiverse] This is valid, but nothing here differs from what you "
+    "started with, so there is nothing to finish. Make a real change first."
 )
-
-INVALID_NOTICE = "[optiverse] Not valid yet, so `done` is refused:\n\n{log}"
-
-REMEMBERED_NOTICE = "[optiverse] Remembered."
 
 EVALUATOR_FAILED_NOTICE = (
     "[optiverse] The evaluator could not be run, which is a problem with the "
@@ -220,10 +173,11 @@ _CAMEL_BOUNDARIES = (
 def normalize_exit_status(status: str) -> str:
     """Lower-case, underscore-separated, whatever spelling it arrived in.
 
-    Exit statuses reach us from three places: this module (`done`, `gave_up`),
-    mini-swe-agent's own protocol (`LimitsExceeded`) and exception class names
-    (`RateLimitError`). Only the first is ours to spell, so normalising at the
-    boundary is what actually makes the stored values consistent.
+    Exit statuses reach us from three places: this module (`validated`,
+    `gave_up`), mini-swe-agent's own protocol (`LimitsExceeded`) and exception
+    class names (`RateLimitError`). Only the first is ours to spell, so
+    normalising at the boundary is what actually makes the stored values
+    consistent.
 
     The `error:` prefix keeps its colon, so a crash stays distinguishable from a
     normal outcome at a glance.
@@ -278,7 +232,7 @@ def _header_delay(error: Exception) -> Optional[float]:
 
 
 class ToolCallingModel(LitellmModel):
-    """Offers all five tools, and waits as long as the provider says.
+    """Offers all three tools, and waits as long as the provider says.
 
     mini-swe-agent sends exactly one tool and its parser rejects every other
     name, so more than one tool means owning the request and the parse. Both are
@@ -369,11 +323,10 @@ class ToolCallingModel(LitellmModel):
         return cast(List[Dict[str, Any]], actions)
 
 
-# The one argument each tool takes, for the three that take one. `bash` names its
+# The one argument each tool takes, for the two that take one. `bash` names its
 # `command` because that is the key `LocalEnvironment.execute` reads.
 _TOOL_ARGUMENTS = {
     BASH_TOOL_NAME: "command",
-    REMEMBER_TOOL_NAME: "text",
     GIVE_UP_TOOL_NAME: "reason",
 }
 
@@ -391,7 +344,7 @@ def _action(tool_call: Any) -> Optional[Dict[str, Any]]:
         "tool_call_id": tool_call.id,
     }
 
-    if name in (VALIDATE_TOOL_NAME, DONE_TOOL_NAME):
+    if name == VALIDATE_TOOL_NAME:
         return action
 
     argument = _TOOL_ARGUMENTS.get(name)
@@ -439,19 +392,20 @@ def _format_error() -> Dict[str, Any]:
 
 
 class ToolEnvironment(LocalEnvironment):
-    """Answers the four tools that are not `bash`.
+    """Answers the two tools that are not `bash`.
 
     They are answered here rather than by programs on the path, so the
     evaluator's command is never anywhere the agent can read it — `score` is not
     one word away from `validate` — and so which action is which is the tool's
     name rather than a guess about what a command line meant.
 
-    `done` is the only ordinary way a turn ends, and it is guarded twice. The
-    codebase arrives holding a copy of the parent, so an agent that changed
-    nothing and finished would submit a byte-identical duplicate; and a solution
-    that does not validate is a wasted iteration the agent could still have
-    fixed. Both refusals are ordinary observations, so they cost a correction
-    rather than the turn.
+    `validate` is the ordinary way a turn ends. Once the work is correct, more
+    work belongs to the outer loop: continuing would let the agent hill-climb,
+    which costs tokens and quietly undoes diversification.
+
+    Ending requires the tree to have *changed* as well as validated. The codebase
+    arrives holding a copy of the parent, which is already valid, so without that
+    guard an agent could finish by validating someone else's work.
     """
 
     def __init__(
@@ -459,14 +413,12 @@ class ToolEnvironment(LocalEnvironment):
         *,
         baseline_digest: str,
         codebase: Path,
-        remember: Callable[[str], None],
         validate: Callable[[], ValidationResult],
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._baseline_digest = baseline_digest
         self._codebase = codebase
-        self._remember = remember
         self._validate = validate
         self.validate_runs = 0
 
@@ -476,52 +428,36 @@ class ToolEnvironment(LocalEnvironment):
         tool = action.get("tool")
 
         if tool == VALIDATE_TOOL_NAME:
-            return self._report()
-
-        if tool == REMEMBER_TOOL_NAME:
-            self._remember(str(action.get("text", "")))
-            return _result(REMEMBERED_NOTICE, returncode=0)
-
-        if tool == DONE_TOOL_NAME:
-            return self._finish()
+            return self._check()
 
         if tool == GIVE_UP_TOOL_NAME:
             raise Submitted(_exit(GAVE_UP_EXIT_STATUS, str(action.get("reason", ""))))
 
         return super().execute(action, cwd, timeout=timeout)
 
-    def _report(self) -> Dict[str, Any]:
-        """What the evaluator says, and nothing more."""
+    def _check(self) -> Dict[str, Any]:
+        """What the evaluator says — and the end of the turn, if it says enough.
+
+        A refusal is an ordinary observation, so an agent that ran this too early
+        or on something broken spends a step rather than the iteration.
+        """
+        self.validate_runs += 1
+
         try:
-            result = self._run_validate()
+            result = self._validate()
         except EvaluatorError as error:
             # Not the candidate's fault, so it is reported rather than counted as
-            # invalid, and the agent gets to keep working.
+            # invalid, and the agent gets to keep working. It is not trapped
+            # either: `give_up` is still there if the evaluator stays broken.
             return _result(EVALUATOR_FAILED_NOTICE.format(error=error), returncode=1)
 
-        return _result(result.log, returncode=0 if result.valid else 1)
-
-    def _finish(self) -> Dict[str, Any]:
-        """End the turn, if the work is both changed and valid."""
-        if codebase_helpers.digest(self._codebase) == self._baseline_digest:
-            return _result(UNCHANGED_NOTICE, returncode=1)
-
-        try:
-            result = self._run_validate()
-        except EvaluatorError as error:
-            # Refusing here would trap the agent in a turn it has no way to end,
-            # over something that is not its fault. It gets to finish.
-            logger.warning(f"Evaluator failed while finishing: {error}")
-            raise Submitted(_exit(DONE_EXIT_STATUS, ""))
-
         if not result.valid:
-            return _result(INVALID_NOTICE.format(log=result.log), returncode=1)
+            return _result(result.log, returncode=1)
 
-        raise Submitted(_exit(DONE_EXIT_STATUS, ""))
+        if codebase_helpers.digest(self._codebase) == self._baseline_digest:
+            return _result(result.log + UNCHANGED_NOTICE, returncode=1)
 
-    def _run_validate(self) -> ValidationResult:
-        self.validate_runs += 1
-        return self._validate()
+        raise Submitted(_exit(VALIDATED_EXIT_STATUS, ""))
 
 
 def _result(output: str, *, returncode: int) -> Dict[str, Any]:
