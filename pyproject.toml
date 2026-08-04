@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "optiverse"
-version = "0.0.3"
+version = "0.1.0"
 description = "An optimizer whose search space is code"
 authors = [{ name = "Mathieu Larose", email = "mathieu@mathieularose.com" }]
 license = "GPL-3.0"
@@ -17,9 +17,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 # The search loop, the store and the two process contracts need nothing. This is
-# for AgentGenerator, the only generator that ships, which cannot run without
-# it. Imported inside the methods that use it, so `import optiverse` still costs
-# nothing.
+# for the two agent implementations that ship, which cannot run without it.
+# Reached only through `optiverse.mini_swe_agent`, and imported inside the
+# methods that use it, so `import optiverse` still costs nothing.
 dependencies = ["mini-swe-agent==2.4.6"]
 
 [project.optional-dependencies]

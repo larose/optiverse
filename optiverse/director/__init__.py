@@ -2,7 +2,7 @@
 
 A director is handed the state of the search and decides what to try next. It
 writes `plan.json` in its working directory and nothing is returned but metadata:
-the file *is* the output, the same way a generator's output is a codebase.
+the file *is* the output, the same way a programmer's output is a codebase.
 
 That indirection is not ceremony. A director driving a shell agent has no other
 way to hand anything back, and routing the decision through a file it validates
@@ -32,7 +32,7 @@ class DirectorContext:
     validate: Callable[[], ValidationResult]
     """Whether the plan currently on disk is usable, and what was wrong if not.
 
-    The same contract the generator's `validate` has, for the same reason: a
+    The same contract the programmer's `validate` has, for the same reason: a
     director driving an agent is expected to expose this as a tool, so a bad
     plan costs one correction rather than the iteration."""
 

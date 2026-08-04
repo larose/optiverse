@@ -1,7 +1,7 @@
 """Run configuration.
 
-There is nothing about models here. Optiverse knows about generators; a
-generator knows about whatever produces code.
+There is nothing about models here. Optiverse knows about programmers; a
+programmer knows about whatever produces code.
 """
 
 from dataclasses import dataclass, field

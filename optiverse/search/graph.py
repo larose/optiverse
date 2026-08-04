@@ -1,7 +1,7 @@
 """The search space: a tree of ideas, stored as its arcs.
 
 A **node** is an idea — the constraints accumulated from the root. A
-**constraint** is prose telling the coding agent how to narrow its approach, and
+**constraint** is prose telling the programmer how to narrow its approach, and
 it lives on the **arc**, not in the node. A tree node has exactly one inbound
 arc, so an arc *is* a node's whole record, and the node set is implied by the
 file: `arcs.json` is a list of `(parent, child, constraint)` triplets and nothing
@@ -175,7 +175,7 @@ class Graph:
         """The constraints in force at a node, root first.
 
         Walks upward and reverses, so the list reads in the order the search
-        committed to them — which is the order the coding agent should meet them.
+        committed to them — which is the order the programmer should meet them.
         """
         walked: List[str] = []
         current: Optional[str] = node_id

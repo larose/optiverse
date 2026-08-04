@@ -13,7 +13,7 @@ A solution has two parents and they are independent. `node_id` says which *idea*
 it attempts; `parent_solution_id` says which *code* it started from. Keeping them
 apart is what lets the idea tree stay a tree while the code cross-pollinates.
 
-Ids are allocated *before* generation so the agent can work directly in
+Ids are allocated *before* the programmer runs so it can work directly in
 `<id>/code/`, and they carry an `s_` prefix so a solution id can never be passed
 where a node id belongs.
 
@@ -111,7 +111,7 @@ class Store(ABC):
 
 class FileSystemStore(Store):
     def __init__(self, directory: Path) -> None:
-        # Absolute, because these paths become an agent's working directory and
+        # Absolute, because these become the programmer's working directory and
         # the argument to an evaluator subprocess, neither of which can be
         # trusted to run from here. The prompt is relative; this is not. Not
         # resolved, either: symlinks stay as the caller wrote them.

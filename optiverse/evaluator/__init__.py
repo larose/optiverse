@@ -10,7 +10,7 @@ language:
                                         stderr: log.
 
 `validate` answers with its exit code alone. There is no payload, so there is no
-score for the agent to read: withholding it is structural rather than a rule.
+score for the programmer to read: withholding it is structural, not a rule.
 
 `score` is the asymmetric mode because it has a machine consumer. A `null` score
 means the run completed but the candidate is unscoreable; a non-zero exit means
@@ -36,7 +36,7 @@ SCORE = "score"
 class ValidationResult:
     """The outcome of a `validate` run.
 
-    `log` carries both streams. The agent never runs the evaluator itself — it
+    `log` carries both streams. The programmer never runs the evaluator itself — it
     calls a tool that runs it here — so this is the only way the diagnostics
     reach it, and a compiler error it cannot read is an iteration wasted.
     """
@@ -79,7 +79,7 @@ class EvaluatorCommand:
         return [*self._command, mode, os.path.abspath(codebase)]
 
     def shell_command(self, mode: str, codebase: Path) -> str:
-        """The command as a shell string, for the agent's instructions."""
+        """The command as a shell string, for the programmer's instructions."""
         return subprocess.list2cmdline(self.argv(mode, codebase))
 
     def _run(
@@ -110,7 +110,7 @@ class EvaluatorCommand:
         agent's turn, and `score` remains authoritative.
 
         Both streams are joined, in the order a terminal would have shown them.
-        An evaluator is free to diagnose on either, and the agent reading this
+        An evaluator is free to diagnose on either, and whoever reads this
         has no way to ask for the other one.
         """
         result = self._run(VALIDATE, codebase, self._validate_timeout_seconds)
@@ -135,7 +135,7 @@ class EvaluatorCommand:
 def _resolve_program(command: Sequence[str]) -> List[str]:
     """Make a command that names files runnable from any directory.
 
-    The agent runs in its own codebase, so a relative `./evaluate` — or the
+    The programmer runs in its own codebase, so a relative `./evaluate` — or the
     script in `[interpreter, script]`, which is the shape the examples use —
     would find nothing from there.
 

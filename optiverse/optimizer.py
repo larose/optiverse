@@ -47,13 +47,13 @@ class Optimizer:
             status = search_result.tags.get("director_exit_status", "unknown")
             raise IterationFailed(f"the director wrote no usable plan ({status})")
 
-        # Allocate first, so the agent works directly in the solution's final
+        # Allocate first, so the programmer works directly in the solution's final
         # home. There is no scratch directory and nothing to copy back.
         started_at = datetime.now().isoformat(timespec="seconds")
         solution_id = self._store.allocate()
         codebase = self._store.codebase_path(solution_id)
 
-        # The agent opens on the code it is improving rather than copying it in
+        # The programmer opens on the code it improves rather than copying it in
         # itself, which is one thing fewer to get wrong and makes "you changed
         # nothing" a fact the environment can check.
         codebase_helpers.materialize(

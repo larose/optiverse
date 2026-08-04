@@ -3,7 +3,7 @@
 The director's whole vocabulary is three fields. It names a node to work under,
 names a solution to start the code from, and may add one constraint — which
 creates a child node and works there instead. There is no free-form instruction:
-if it wants the coding agent to do something, that is a constraint, and a
+if it wants the programmer to do something, that is a constraint, and a
 constraint is a node. So the graph is the complete record of the search rather
 than half of it.
 
@@ -12,9 +12,9 @@ Two things the director writes now outlive its turn, and both are prose. In
 next director with the score beside it, which is the difference between a search
 that measures and one that only moves. In `memory.md` it keeps its model of the
 problem, rewritten rather than appended, which is the only place understanding
-accumulates. Neither reaches a coding agent: `memory.md` is the director's alone,
-and an agent that could read what things scored is the one thing this design will
-not have.
+accumulates. Neither reaches the programmer: `memory.md` is the director's alone,
+and a programmer that could read what things scored is the one thing this design
+will not have.
 
 What this module does is run the director and file what it decided. What the
 director is *shown* is `brief.py`, which is a much larger job and changes for
@@ -133,7 +133,7 @@ class Search:
     def constraints(self, node_id: str) -> List[str]:
         """Every constraint in force at a node, root first.
 
-        Read by walking `arcs.json` to the root, so the coding agent's brief is
+        Read by walking `arcs.json` to the root, so the programmer's brief is
         assembled from the graph rather than from a copy kept alongside it.
         """
         return self._graph(self._store.get_all_solutions()).node(node_id).constraints
@@ -361,7 +361,7 @@ class Search:
         `None` means the iteration has failed, and there is deliberately nothing
         to fall back to. Substituting "another attempt at the best solution" gave
         a byte-identical brief every time the director was down, so the loop paid
-        for a full generation and score to re-derive what it already had, and
+        for a full write and score to re-derive what it already had, and
         said nothing louder than a warning.
         """
         if not self.validate(iteration).valid:

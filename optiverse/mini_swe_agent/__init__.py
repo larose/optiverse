@@ -1,6 +1,6 @@
 """mini-swe-agent glue, shared by both agents.
 
-Two things in this project are driven by a coding agent: the generator, which
+Two things in this project are driven by a coding agent: the programmer, which
 writes a candidate, and the director, which decides what to try next. They differ
 in their templates and their working directory, not in their plumbing, so the
 model layer, the limits and the three tools live here — under neither of them,

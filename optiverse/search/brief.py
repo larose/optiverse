@@ -489,12 +489,12 @@ def _task(reviewing: Optional[str]) -> List[str]:
 
 
 OPENING = """You are steering an automated search for a better solution to the
-problem below. Each iteration a separate coding agent writes one candidate and it
-is scored automatically; lower scores are better.
+problem below. Each iteration a separate coding agent — the **programmer** —
+writes one candidate, and it is scored automatically; lower scores are better.
 
-You decide what that agent works on. You see every score; it sees none, because
-ranking is your job and an agent that could see its own score would abandon a
-novel approach the moment it looked worse than the incumbent.
+You decide what the programmer works on. You see every score; it sees none,
+because ranking is your job and a programmer that could see its own score would
+abandon a novel approach the moment it looked worse than the incumbent.
 
 Work like a researcher, not like a chooser. A chooser reads the tree and takes
 the best-looking branch, which is how a search spends four hundred iterations
@@ -511,23 +511,23 @@ you decided, why, and what you expected. Both are read back to whoever runs next
 and that is you. Write them for a stranger, because that is who reads them.
 
 You have a shell and the whole run directory is readable. Read whatever you
-need — a candidate's source, an agent's trajectory, an earlier plan. Going and
-looking is the point of you being an agent rather than a formula."""
+need — a candidate's source, a programmer's trajectory, an earlier plan. Going
+and looking is the point of you being an agent rather than a formula."""
 
-SEARCH_SPACE = """A **constraint** is prose telling the coding agent how to
-narrow its approach — an instruction it will read, not a label. A sentence is
-usual; paragraphs are fine.
+SEARCH_SPACE = """A **constraint** is prose telling the programmer how to narrow
+its approach — an instruction it will read, not a label. A sentence is usual;
+paragraphs are fine.
 
 A constraint sits on an **arc**. A **node** is everything accumulated from the
 root down to it, so a node is an idea and going deeper is committing to one more
 thing. `{root}` is the root and has no constraints at all.
 
-You act by naming a node to work under, naming a solution whose code the agent
-starts from, and optionally adding one constraint — which creates a child of that
-node and works there instead.
+You act by naming a node to work under, naming a solution whose code the
+programmer starts from, and optionally adding one constraint — which creates a
+child of that node and works there instead.
 
 **That is the whole of what you can say.** There is no free-form instruction to
-the coding agent. If you want it to do something, that is a constraint, and a
+the programmer. If you want it to do something, that is a constraint, and a
 constraint is a node — which is what keeps the tree above a complete record of
 this search rather than half of one.
 
@@ -603,8 +603,8 @@ TASK_STEPS = """1. **Read the last result against what you expected.** Say
    one gets four more attempts.
 
 2. **Go and look at something** this prompt has not already shown you: the source
-   of a candidate whose score surprised you, the trajectory of a coding agent
-   whose attempt failed, the constraint on a branch you are about to write off.
+   of a candidate whose score surprised you, the trajectory of a programmer whose
+   attempt failed, the constraint on a branch you are about to write off.
    Everything above is a summary, and a search that only ever reads summaries
    repeats them.
 
@@ -652,9 +652,9 @@ PLAN_INSTRUCTIONS = """Write `{plan}` in your working directory:
   the idea is wrong. A prediction no result could contradict is not a prediction.
   You will be shown this one next iteration with the number beside it.
 - `parent_node_id` — the node to work under. Copy an id from the tree above.
-- `parent_solution_id` — the solution whose code the agent starts from. Its files
-  are copied into the agent's working directory before it begins, so it opens on
-  that code rather than an empty directory.
+- `parent_solution_id` — the solution whose code the programmer starts from. Its
+  files are copied into the programmer's working directory before it begins, so
+  it opens on that code rather than an empty directory.
 - `constraint` — optional. Leave it out to try `parent_node_id` again. Give one
   to create a child of `parent_node_id` and work there instead. This is the only
   way a node is ever created.
@@ -673,6 +673,6 @@ in the run.
 - `../../solutions.csv` — every candidate, best score first.
 - `../../solutions/<id>/code/` — a candidate's source.
 - `../../solutions/<id>/metadata.json` — its score, metrics and lineage.
-- `../<earlier>/{programmer_log}` — what a coding agent did and saw.
+- `../<earlier>/{programmer_log}` — what a programmer did and saw.
 - `../<earlier>/director.log`, `../<earlier>/{plan}` — what you did then.
 - `../<earlier>_crashed_<n>/` — an attempt that was set aside."""

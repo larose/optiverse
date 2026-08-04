@@ -1,6 +1,6 @@
-"""The generation seam.
+"""The writing seam.
 
-A generator is handed a codebase directory holding a copy of the solution it is
+A programmer is handed a codebase directory holding a copy of the solution it is
 improving, and changes it. Nothing is returned but metadata: the codebase *is*
 the output, and it is already where it belongs.
 
@@ -31,7 +31,7 @@ class ProgrammerContext:
     validate: Callable[[], ValidationResult]
     """Whether `codebase` is currently valid, and what the evaluator said.
 
-    The only way a generator gets to run the evaluator. A generator driving an
+    The only way a programmer gets to run the evaluator. A programmer driving an
     agent is expected to expose this as a tool rather than as a command the agent
     types: the evaluator's path is then never disclosed, so `score` is not one
     word away from `validate`."""

@@ -2,11 +2,11 @@
 
 The director gets a shell and the run directory. That is the whole idea: rather
 than being handed a summary somebody else decided was sufficient, it goes and
-reads whatever it needs — a candidate's source, an agent's trajectory, the raw
+reads whatever it needs — a candidate's source, a programmer's trajectory, the raw
 arcs — and forms its own view.
 
-Unlike the generator it *is* shown the scores, because ranking is its job. The
-generator is kept ignorant of them so it cannot abandon a novel approach for
+Unlike the programmer it *is* shown the scores, because ranking is its job. The
+programmer is kept ignorant of them so it cannot abandon a novel approach for
 looking worse than the incumbent; the director exists to make exactly that call.
 
 It is read-only outside its own directory by convention rather than by
@@ -31,13 +31,13 @@ logger = logging.getLogger(__name__)
 MODEL_VARIABLE = "OPTIVERSE_DIRECTOR_MODEL"
 FALLBACK_MODEL_VARIABLE = "OPTIVERSE_MODEL"
 
-# Matched to the generator's, and for the same reason: the job is no longer only
+# Matched to the programmer's, and for the same reason: the job is no longer only
 # to pick a direction. On a review the director reads a candidate it has not seen,
 # reconciles the last prediction, and rewrites its notebook before it decides —
 # and a budget sized for choosing from a list would cut it off mid-thought.
 DEFAULT_LIMITS = AgentLimits(step_limit=40, wall_time_limit_seconds=900)
 
-# `validate` refuses to end a turn on an unchanged tree, which stops a generator
+# `validate` refuses to end a turn on an unchanged tree, which stops a programmer
 # submitting the parent it was handed. The director has no equivalent hazard —
 # the plan it validates is the plan it just wrote — so the guard is switched off
 # with a digest nothing can produce, `digest` always returning a full hex hash.
@@ -104,7 +104,7 @@ class AgentDirector(Director):
 
     @classmethod
     def from_env(cls, *, limits: Optional[AgentLimits] = None) -> "AgentDirector":
-        """Build from `OPTIVERSE_DIRECTOR_MODEL`, falling back to the generator's.
+        """Build from `OPTIVERSE_DIRECTOR_MODEL`, falling back to the shared one.
 
         Separate because the two jobs do not want the same model: planning reads a
         lot and writes a little, and a run may well want to spend differently on

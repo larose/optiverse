@@ -1,4 +1,4 @@
-"""Generation by a coding agent, over mini-swe-agent.
+"""A programmer that is a coding agent, over mini-swe-agent.
 
 The agent is given a working directory holding a copy of the solution it is
 improving, and three tools. It is never given a score — not its own, not its

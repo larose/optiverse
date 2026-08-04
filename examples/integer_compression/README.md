@@ -10,15 +10,15 @@ See [problem.md](problem.md) for the complete problem description and requiremen
 
 - [optimize.py](optimize.py) — starts an optimization run. `make run.integer_compression` runs it.
 - [initial/](initial/) — the seed codebase: a `compressor.go` that serialises the values unchanged. The first solution is a copy of this, and every later one descends from it. The evolvable unit is the whole package, not one file.
-- [harness/](harness/) — everything the example owns for measuring. Never copied into a codebase and never visible to an agent.
+- [harness/](harness/) — everything the example owns for measuring. Never copied into a codebase and never visible to the programmer.
   - `evaluate.py` — the evaluator command, and the only thing here anyone else calls. `score` builds the candidate and takes three timings; `validate` builds it and round-trips the synthetic cases.
   - `score/main.go` — compresses the dataset, times `Decompress`, writes what it measured.
-  - `validate/main.go` — checks `Decompress(Compress(data)) == data` across eighteen synthetic cases: block boundaries at 127/128/129, values at `MaxUint32`, and repeated values, which are what the real dataset is almost entirely made of. It needs no dataset and finishes in milliseconds, which is what makes it usable inside the agent's loop.
+  - `validate/main.go` — checks `Decompress(Compress(data)) == data` across eighteen synthetic cases: block boundaries at 127/128/129, values at `MaxUint32`, and repeated values, which are what the real dataset is almost entirely made of. It needs no dataset and finishes in milliseconds, which is what makes it usable inside the programmer's loop.
   - `dataset.py` — fetches `ts.txt` and converts it once into `ts.bin`.
   - `ts.txt`, `ts.bin` — the benchmark data. Gitignored, and they live here and nowhere else.
 
-The agent has no way to run any of it. It writes Go and calls `validate`, which
-answers valid or invalid with diagnostics and nothing more.
+The programmer has no way to run any of it. It writes Go and calls `validate`,
+which answers valid or invalid with diagnostics and nothing more.
 
 Scoring needs the benchmark dataset (~1.6 GB downloaded, ~577 MB converted, both gitignored):
 

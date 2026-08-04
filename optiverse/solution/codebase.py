@@ -21,7 +21,7 @@ def relative_files(root: Path) -> List[str]:
 def materialize(source: Path, destination: Path) -> None:
     """Copy `source` to `destination` and make sure the result is writable.
 
-    `copytree` preserves mode bits, so a source the agent must be able to edit —
+    `copytree` preserves mode bits, so a source the programmer must edit —
     a seed codebase checked out read-only, a solution from a run made before
     stored codebases became writable — would otherwise arrive unwritable.
     """
@@ -30,7 +30,7 @@ def materialize(source: Path, destination: Path) -> None:
 
 
 def digest(root: Path) -> str:
-    """A stable hash of the tree, used to tell whether the agent changed anything.
+    """A stable hash of the tree, used to tell whether the programmer changed it.
 
     Covers relative paths and file bytes; not mode bits or timestamps.
     """
